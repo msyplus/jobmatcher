@@ -331,25 +331,75 @@ def migrate_legacy_data():
         with open(os.path.join(default_dir, "info.json"), "w", encoding="utf-8") as f:
             json.dump(info, f, ensure_ascii=False, indent=2)
 
-# 启动时自动恢复默认用户数据（Streamlit Cloud 部署后数据丢失的兜底）
+# 种子数据：仅对指定用户加载真实经历库，其他用户生成模拟数据
 SEED_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "seed_experience_library.json")
-def seed_default_user():
-    default_dir = get_profile_path("default")
-    exp_file = os.path.join(default_dir, "experience_library.json")
-    hist_file = os.path.join(default_dir, "application_history.json")
-    info_file = os.path.join(default_dir, "info.json")
-    # 仅在数据完全不存在时恢复
-    if not os.path.exists(exp_file) and os.path.exists(SEED_FILE):
-        import shutil
-        shutil.copy(SEED_FILE, exp_file)
+DEVICE_SECRET = "msy2026"  # 只有URL带此密钥的设备才能加载真实数据
+
+MOCK_EXPERIENCE_LIB = {
+    "basic": {"name": "张明", "phone": "138****1234", "email": "demo@example.com"},
+    "education": [
+        {"time": "2019.09–2022.06", "school": "XX大学", "degree": "硕士", "major": "计算机科学与技术", "highlights": []},
+        {"time": "2015.09–2019.06", "school": "YY大学", "degree": "本科", "major": "信息管理", "highlights": []},
+    ],
+    "skills": [
+        {"name": "数据分析", "category": "tech", "level": "advanced"},
+        {"name": "项目管理", "category": "methodology", "level": "intermediate"},
+        {"name": "用户运营", "category": "domain", "level": "intermediate"},
+        {"name": "SQL", "category": "tech", "level": "intermediate"},
+        {"name": "Python", "category": "tech", "level": "beginner"},
+        {"name": "跨部门沟通", "category": "methodology", "level": "advanced"},
+        {"name": "产品运营", "category": "domain", "level": "intermediate"},
+    ],
+    "experiences": [
+        {"id": "mock-1", "company": "某互联网科技公司", "role": "产品运营专员", "time": "2021.07–2024.03",
+         "category": ["产品运营"], "summary": "负责用户增长与活动运营",
+         "bullets": [
+             {"text": "负责APP日活用户增长，通过A/B测试优化推送策略，DAU提升25%", "keywords": ["用户增长", "A/B测试"]},
+             {"text": "策划并执行3场大型营销活动，累计参与用户超50万，ROI达1:3.5", "keywords": ["活动运营", "ROI"]},
+             {"text": "搭建用户画像体系，实现精准推送，消息点击率从8%提升至15%", "keywords": ["用户画像", "精准推送"]},
+         ]},
+        {"id": "mock-2", "company": "某电商平台", "role": "运营实习生", "time": "2020.06–2020.09",
+         "category": ["电商运营"], "summary": "协助商家运营与数据分析",
+         "bullets": [
+             {"text": "协助运营团队管理50+商家店铺，监控商品上下架与活动报名", "keywords": ["商家运营"]},
+             {"text": "使用Excel和SQL完成周度销售数据报表，为运营决策提供数据支持", "keywords": ["数据分析", "SQL"]},
+         ]},
+    ],
+    "certifications": ["PMP项目管理认证", "数据分析师认证"],
+    "personal_projects": [],
+    "resume_directions": {"产品运营": {"target_roles": ["产品运营"], "emphasize_skills": ["数据分析", "用户运营", "项目管理"], "primary_experiences": ["mock-1", "mock-2"], "summary_template": "3年产品运营经验，擅长数据驱动增长。"}},
+    "interview_entries": [],
+}
+
+def is_owner_device():
+    """检查当前设备是否是真实数据所有者（URL含密钥）"""
+    return st.query_params.get("key", "") == DEVICE_SECRET
+
+def init_user_data(profile_id):
+    """初始化用户数据：真实设备加载种子数据，其他设备生成模拟数据"""
+    user_dir = get_profile_path(profile_id)
+    exp_file = os.path.join(user_dir, "experience_library.json")
+    if not os.path.exists(exp_file):
+        if is_owner_device() and os.path.exists(SEED_FILE):
+            import shutil
+            shutil.copy(SEED_FILE, exp_file)
+        else:
+            mock_data = json.loads(json.dumps(MOCK_EXPERIENCE_LIB))
+            mock_data["basic"]["name"] = f"演示用户{profile_id[:4]}"
+            with open(exp_file, "w", encoding="utf-8") as f:
+                json.dump(mock_data, f, ensure_ascii=False, indent=2)
+    hist_file = os.path.join(user_dir, "application_history.json")
     if not os.path.exists(hist_file):
         with open(hist_file, "w", encoding="utf-8") as f:
             json.dump([], f)
+    info_file = os.path.join(user_dir, "info.json")
     if not os.path.exists(info_file):
+        info = {"name": f"用户{profile_id[:6]}", "created_at": datetime.now().strftime("%Y-%m-%d %H:%M")}
+        if is_owner:
+            info = {"name": "牟思雨", "email": "msy1994dut@163.com", "phone": "18504284554", "created_at": datetime.now().strftime("%Y-%m-%d %H:%M")}
         with open(info_file, "w", encoding="utf-8") as f:
-            json.dump({"name": "牟思雨", "email": "msy1994dut@163.com", "phone": "18504284554", "created_at": datetime.now().strftime("%Y-%m-%d %H:%M")}, f)
+            json.dump(info, f, ensure_ascii=False, indent=2)
 
-seed_default_user()
 migrate_legacy_data()
 
 # 动态路径（基于活跃用户）
@@ -3846,6 +3896,7 @@ def login_screen():
                     else:
                         pid = create_profile(name, email, "", pw)
                         set_active_profile(pid)
+                        init_user_data(pid)
                         st.session_state["logged_in"] = True
                         st.rerun()
 
@@ -3882,6 +3933,7 @@ def login_screen():
                         st.error("用户不存在")
                     elif verify_login(found["id"], login_pw):
                         set_active_profile(found["id"])
+                        init_user_data(found["id"])
                         st.session_state["logged_in"] = True
                         st.rerun()
                     else:
@@ -3921,6 +3973,7 @@ def login_screen():
                     else:
                         pid = create_profile(reg_name, reg_email, "", reg_pw)
                         set_active_profile(pid)
+                        init_user_data(pid)
                         st.session_state["logged_in"] = True
                         st.session_state["show_register"] = False
                         st.rerun()
@@ -3943,6 +3996,10 @@ def main():
         login_screen()
         return
 
+    # 非访客用户：初始化数据（真实设备加载种子，其他设备加载模拟数据）
+    if not st.session_state.get("is_guest"):
+        init_user_data(get_active_profile())
+
     # 访客模式标识
     if st.session_state.get("is_guest"):
         st.warning("🔒 试用模式：数据不会保存，刷新后丢失。登录后可永久保存数据。", icon="🔒")
@@ -3961,6 +4018,9 @@ def main():
         return
 
     st.title("🎯 JobMatcher")
+    if is_owner_device():
+        st.success("🔑 已识别为真实数据设备", icon="🔑")
+    # 不暴露密钥状态给其他设备
     st.caption("v1.8 — JobMatcher：投递+分析+定制+求职信+面试预测+复盘+日程+背调+反馈")
 
     # 检查依赖
