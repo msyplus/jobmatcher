@@ -372,8 +372,15 @@ MOCK_EXPERIENCE_LIB = {
 }
 
 def is_owner_device():
-    """检查当前设备是否是真实数据所有者（URL含密钥）"""
-    return st.query_params.get("key", "") == DEVICE_SECRET
+    """检查当前设备是否是真实数据所有者"""
+    # 1. session已授权
+    if st.session_state.get("device_authorized"):
+        return True
+    # 2. URL含密钥
+    if st.query_params.get("key", "") == DEVICE_SECRET:
+        st.session_state["device_authorized"] = True
+        return True
+    return False
 
 def init_user_data(profile_id):
     """初始化用户数据：真实设备加载种子数据，其他设备生成模拟数据"""
@@ -3978,6 +3985,20 @@ def login_screen():
                         st.session_state["show_register"] = False
                         st.rerun()
 
+        # 设备激活（记住本设备）
+        with st.expander("📱 激活本设备（记住登录状态）"):
+            with st.form("device_auth"):
+                device_key = st.text_input("设备密钥", type="password", placeholder="输入设备密钥以记住本设备")
+                if st.form_submit_button("激活设备"):
+                    if device_key == DEVICE_SECRET:
+                        st.query_params["key"] = DEVICE_SECRET
+                        st.session_state["device_authorized"] = True
+                        st.success("设备已激活！下次打开自动识别")
+                        st.caption("收藏当前网址，以后直接打开即可")
+                        st.rerun()
+                    else:
+                        st.error("密钥错误")
+
 
 def main():
     # 初始化管理员
@@ -4058,6 +4079,8 @@ def main():
         st.session_state["discovered_jobs"] = None
     if "is_guest" not in st.session_state:
         st.session_state["is_guest"] = False
+    if "device_authorized" not in st.session_state:
+        st.session_state["device_authorized"] = False
 
     records = load_history()
 
