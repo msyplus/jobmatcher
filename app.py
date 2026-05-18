@@ -2582,71 +2582,93 @@ JOB_DISCOVERY_PROMPT = """你是招聘市场分析师。根据候选人经历库
 [{{"company":"公司全名","position":"岗位","city":"城市","salary":"薪资","direction":"方向","match_reason":"匹配原因","hard_skills":["技能"],"apply_url":"Boss链接","jd_brief":"50字简介"}}]"""
 
 
+PRESET_JOBS = [
+    {"id":"p1","company":"美团","position":"大模型智能客服运营","city":"上海","salary":"20k-35k",
+     "direction":"AI产品运营","match_reason":"候选人主导过大模型智能客服0-1落地，精准匹配Agent搭建与Prompt工程要求",
+     "hard_skills":["大模型应用","Agent搭建","Prompt工程","数据分析"],
+     "apply_url":"https://www.zhipin.com/web/geek/job?query=大模型智能客服运营&city=101020100",
+     "jd_brief":"设计智能客服对话流程与交互体验，基于业务场景搭建大模型Agent解决方案，建立智能体任务完成度等指标体系。",
+     "source":"预置推荐","discovered_at":""},
+
+    {"id":"p2","company":"得物App","position":"AI质检服务域运营专家","city":"上海","salary":"20k-45k·16薪",
+     "direction":"AI产品运营","match_reason":"候选人有AI质检模型评测与badcase闭环经验，完全匹配四维度评测体系设计需求",
+     "hard_skills":["AI质检","模型评测","badcase分析","服务体验"],
+     "apply_url":"https://www.zhipin.com/web/geek/job?query=AI质检运营&city=101020100",
+     "jd_brief":"负责AI质检模型服务标准设计，建立全量质检效果评估与badcase反馈优化机制，推动客服质量提升。",
+     "source":"预置推荐","discovered_at":""},
+
+    {"id":"p3","company":"美团","position":"纠纷与治理服务流程管理","city":"上海","salary":"20k-40k",
+     "direction":"服务体验运营","match_reason":"候选人搭建过投诉预警平台与SOP体系，有完整的纠纷治理方法论和跨部门推动经验",
+     "hard_skills":["纠纷治理","SOP搭建","数据分析","跨部门协同"],
+     "apply_url":"https://www.zhipin.com/web/geek/job?query=服务体验治理&city=101020100",
+     "jd_brief":"制定用户/商户服务流程及执行规范，建立服务运营机制推动前置解决，通过数据分析推动优化方案落地。",
+     "source":"预置推荐","discovered_at":""},
+
+    {"id":"p4","company":"京东","position":"体验治理策略运营","city":"上海","salary":"30k-60k·20薪",
+     "direction":"服务体验运营","match_reason":"候选人搭建过14项核心指标体验监控体系，对进线率/舆情率/客诉率有直接管控经验",
+     "hard_skills":["体验治理","指标体系","全链路体验","SQL"],
+     "apply_url":"https://www.zhipin.com/web/geek/job?query=体验治理策略&city=101020100",
+     "jd_brief":"构建用户全链路体验监测体系，分析体验痛点，对进线率、舆情率、客诉率负责，推动AI模型优化。",
+     "source":"预置推荐","discovered_at":""},
+
+    {"id":"p5","company":"字节跳动","position":"AI产品运营（智能助手方向）","city":"上海","salary":"30k-60k",
+     "direction":"AI产品运营","match_reason":"候选人有LLM数据标注(3000条)与Prompt优化经验，深入理解RAG链路与badcase归因",
+     "hard_skills":["LLM运营","Prompt工程","RAG","badcase归因","数据标注"],
+     "apply_url":"https://www.zhipin.com/web/geek/job?query=AI产品运营智能助手&city=101020100",
+     "jd_brief":"负责智能助手核心模块运营，主导RAG链路知识库构建，建立线上质量监控与badcase归因机制。",
+     "source":"预置推荐","discovered_at":""},
+
+    {"id":"p6","company":"百度","position":"大模型平台产品运营","city":"沈阳","salary":"20k-35k",
+     "direction":"AI产品运营","match_reason":"沈阳稀缺AI岗位，候选人有大模型应用运营全流程经验，匹配平台产品运营要求",
+     "hard_skills":["大模型平台","产品运营","Prompt工程","数据分析"],
+     "apply_url":"https://www.zhipin.com/web/geek/job?query=大模型平台产品运营&city=101070100",
+     "jd_brief":"推动大模型平台能力在各业务线落地，数据驱动产品优化与用户增长，建立平台运营体系。",
+     "source":"预置推荐","discovered_at":""},
+]
+
 def discover_jobs(exp_lib):
-    """AI主动发现匹配岗位"""
-    if not HAS_ANTHROPIC:
-        return []
+    """AI主动发现匹配岗位（先返回预置岗位，再尝试AI增强）"""
+    import copy, time
+    jobs = copy.deepcopy(PRESET_JOBS)
+    for j in jobs:
+        j["discovered_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    directions = list(exp_lib.get("resume_directions", {}).keys())
-    skills = [s["name"] for s in exp_lib.get("skills", []) if s.get("level") in ["expert", "advanced"]]
-    cities = exp_lib.get("basic", {}).get("cities", ["上海", "北京"])
-    salary_range = f"{exp_lib.get('basic',{}).get('salary_min',18)}k-{exp_lib.get('basic',{}).get('salary_max',26)}k"
-    exp_summary = "、".join([e["summary"] for e in exp_lib.get("experiences", [])[:3]])
-
-    prompt = JOB_DISCOVERY_PROMPT.format(
-        directions="、".join(directions[:3]) if directions else "AI产品运营/服务体验运营",
-        skills="、".join(skills[:10]),
-        experience_summary=exp_summary[:200],
-        cities="、".join(cities[:4]) if isinstance(cities, list) else str(cities),
-        salary_range=salary_range,
-    )
-
-    try:
-        client = get_anthropic_client()
-        if not client:
-            return []
-        resp = client.messages.create(
-            model=os.environ.get("ANTHROPIC_MODEL", "deepseek-v4-pro"),
-            max_tokens=2500, temperature=0.5,
-            system="只输出合法JSON数组。基于2026年5月市场真实情况推荐，不确定的标注'需核实'。",
-            messages=[{"role": "user", "content": prompt}],
-        )
-        raw = ""
-        for block in resp.content:
-            # 跳过 thinking block
-            if hasattr(block, 'text') and block.text and block.text.strip():
-                raw = block.text.strip()
-                break
-        if not raw:
-            # 尝试从 content 直接获取
-            raw = str(resp.content)
-        # 清理thinking标签
-        raw = re.sub(r'<thinking>.*?</thinking>', '', raw, flags=re.DOTALL)
-        m = re.search(r'\[.*\]', raw, re.DOTALL)
-        if m:
-            try:
-                jobs = json.loads(m.group())
-            except json.JSONDecodeError:
-                # 截断修复
-                fixed = m.group().rstrip().rstrip(',').rstrip()
-                if not fixed.endswith(']'):
-                    # 找到最后一个完整的对象
-                    last_complete = fixed.rfind('"}')
-                    if last_complete > 0:
-                        fixed = fixed[:last_complete+2] + '\n]'
-                try:
-                    jobs = json.loads(fixed)
-                except:
-                    return []
-            for job in jobs:
-                job["id"] = str(uuid.uuid4())[:8]
-                job["source"] = "AI推荐"
-                job["discovered_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-            return jobs
-        return []
-    except Exception as e:
-        return []
-    return []
+    # 尝试 AI 增强（失败不影响预置结果）
+    if HAS_ANTHROPIC:
+        try:
+            client = get_anthropic_client()
+            if client:
+                directions = list(exp_lib.get("resume_directions", {}).keys())
+                skills = [s["name"] for s in exp_lib.get("skills", []) if s.get("level") in ["expert", "advanced"]]
+                exp_summary = "、".join([e["summary"] for e in exp_lib.get("experiences", [])[:3]])
+                prompt = f"""推荐2个真实在招岗位补充。输出JSON数组。方向={'、'.join(directions[:3])}，技能={'、'.join(skills[:8])}，城市=上海/北京/沈阳。
+[{{"company":"真实公司全名","position":"岗位","city":"城市","salary":"薪资","direction":"方向","match_reason":"匹配原因20字","hard_skills":["技能"],"apply_url":"https://www.zhipin.com/web/geek/job?query=岗位名&city=城市代码","jd_brief":"50字简介"}}]"""
+                resp = client.messages.create(model="deepseek-v4-pro", max_tokens=1000, temperature=0.5, system="只输出JSON数组。", messages=[{"role":"user","content":prompt}])
+                raw = ""
+                for block in resp.content:
+                    if hasattr(block, 'text') and block.text and block.text.strip():
+                        raw = block.text.strip(); break
+                if not raw:
+                    raw = str(resp.content)
+                raw = re.sub(r'<thinking>.*?</thinking>', '', raw, flags=re.DOTALL)
+                m = re.search(r'\[.*\]', raw, re.DOTALL)
+                if m:
+                    try:
+                        ai_jobs = json.loads(m.group())
+                    except:
+                        fixed = m.group().rstrip().rstrip(',').rstrip()
+                        last = fixed.rfind('"}')
+                        if last > 0: fixed = fixed[:last+2] + '\n]'
+                        try: ai_jobs = json.loads(fixed)
+                        except: ai_jobs = []
+                    for job in ai_jobs:
+                        job["id"] = str(uuid.uuid4())[:8]
+                        job["source"] = "AI增强"
+                        job["discovered_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+                        jobs.append(job)
+        except:
+            pass
+    return jobs
 
 
 def render_auto_apply():
