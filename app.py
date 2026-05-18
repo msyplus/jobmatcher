@@ -18,6 +18,12 @@ try:
 except ImportError:
     HAS_ANTHROPIC = False
 
+try:
+    import bcrypt
+    HAS_BCRYPT = True
+except ImportError:
+    HAS_BCRYPT = False
+
 # ── API 配置（Streamlit Cloud secrets → 环境变量 → 内置默认值）──
 def get_llm_config():
     """获取LLM配置，优先级：st.secrets > 环境变量 > 默认值"""
@@ -260,11 +266,28 @@ def get_exp_lib_file(profile_id=None):
         profile_id = get_active_profile()
     return os.path.join(get_profile_path(profile_id), "experience_library.json")
 
-def create_profile(name, email="", phone=""):
+def hash_password(password):
+    if HAS_BCRYPT:
+        return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    return password  # 无bcrypt时明文
+
+def verify_password(password, hashed):
+    if HAS_BCRYPT and hashed and hashed != password:  # hashed != password 判断是否为hash
+        try:
+            return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
+        except:
+            return password == hashed
+    return password == hashed
+
+def create_profile(name, email="", phone="", password=""):
     """创建新用户档案"""
     pid = str(uuid.uuid4())[:8]
     pdir = get_profile_path(pid)
-    info = {"name": name, "email": email, "phone": phone, "created_at": datetime.now().strftime("%Y-%m-%d %H:%M")}
+    info = {
+        "name": name, "email": email, "phone": phone,
+        "password": hash_password(password) if password else "",
+        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    }
     with open(os.path.join(pdir, "info.json"), "w", encoding="utf-8") as f:
         json.dump(info, f, ensure_ascii=False, indent=2)
     # 初始化空的经历库
@@ -274,6 +297,23 @@ def create_profile(name, email="", phone=""):
     with open(os.path.join(pdir, "application_history.json"), "w", encoding="utf-8") as f:
         json.dump([], f, ensure_ascii=False)
     return pid
+
+def verify_login(profile_id, password):
+    """验证用户登录"""
+    pdir = get_profile_path(profile_id)
+    info_file = os.path.join(pdir, "info.json")
+    if not os.path.exists(info_file):
+        return False
+    with open(info_file, "r", encoding="utf-8") as f:
+        info = json.load(f)
+    stored_pw = info.get("password", "")
+    if not stored_pw:
+        # 旧用户未设密码，首次登录时设置的密码即为密码
+        info["password"] = hash_password(password)
+        with open(info_file, "w", encoding="utf-8") as f:
+            json.dump(info, f, ensure_ascii=False, indent=2)
+        return True
+    return verify_password(password, stored_pw)
 
 def migrate_legacy_data():
     """迁移旧版数据到 default 用户"""
@@ -3262,8 +3302,83 @@ def render_feedback():
 # 主界面
 # ═══════════════════════════════════════
 
+def login_screen():
+    """登录界面"""
+    st.markdown("<h1 style='text-align:center;margin-top:60px'>🎯 JobMatcher</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center;color:#666'>AI 智能投递管理工具</p>", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    col_l, col_m, col_r = st.columns([1, 2, 1])
+    with col_m:
+        profiles = list_profiles()
+        if not profiles:
+            # 首次使用：创建默认用户
+            with st.form("first_login"):
+                st.markdown("### 👋 欢迎首次使用")
+                name = st.text_input("姓名", value="牟思雨")
+                email = st.text_input("邮箱")
+                pw = st.text_input("设置密码", type="password")
+                pw2 = st.text_input("确认密码", type="password")
+                if st.form_submit_button("创建账户并登录", type="primary", use_container_width=True):
+                    if not pw or len(pw) < 4:
+                        st.error("密码至少4位")
+                    elif pw != pw2:
+                        st.error("两次密码不一致")
+                    else:
+                        pid = create_profile(name, email, "", pw)
+                        set_active_profile(pid)
+                        st.session_state["logged_in"] = True
+                        st.rerun()
+        else:
+            with st.form("login_form"):
+                st.markdown("### 🔐 登录")
+                profile_names = {p["id"]: p["name"] for p in profiles}
+                selected = st.selectbox("选择用户", list(profile_names.keys()),
+                    format_func=lambda x: f"{profile_names[x]} ({x})")
+                pw = st.text_input("密码", type="password")
+                if st.form_submit_button("登录", type="primary", use_container_width=True):
+                    if verify_login(selected, pw):
+                        set_active_profile(selected)
+                        st.session_state["logged_in"] = True
+                        st.rerun()
+                    else:
+                        st.error("密码错误")
+
+            st.divider()
+            st.caption("或")
+            if st.button("➕ 创建新用户", use_container_width=True):
+                st.session_state["show_register"] = True
+                st.rerun()
+
+        if st.session_state.get("show_register"):
+            with st.form("register_form"):
+                st.markdown("### 📝 创建新账户")
+                reg_name = st.text_input("姓名")
+                reg_email = st.text_input("邮箱")
+                reg_pw = st.text_input("设置密码", type="password")
+                if st.form_submit_button("注册", type="primary", use_container_width=True):
+                    if not reg_name or not reg_pw:
+                        st.error("姓名和密码为必填")
+                    else:
+                        pid = create_profile(reg_name, reg_email, "", reg_pw)
+                        set_active_profile(pid)
+                        st.session_state["logged_in"] = True
+                        st.session_state["show_register"] = False
+                        st.rerun()
+
+
 def main():
-    st.title("📬 AI 智能投递管理工具")
+    # 登录检查
+    if "logged_in" not in st.session_state:
+        st.session_state["logged_in"] = False
+    if "show_register" not in st.session_state:
+        st.session_state["show_register"] = False
+
+    if not st.session_state["logged_in"]:
+        login_screen()
+        return
+
+    st.title("🎯 JobMatcher")
     st.caption("v1.8 — JobMatcher：投递+分析+定制+求职信+面试预测+复盘+日程+背调+反馈")
 
     # 检查依赖
@@ -3333,13 +3448,27 @@ def main():
                 new_name = st.text_input("姓名")
                 new_email = st.text_input("邮箱")
                 new_phone = st.text_input("手机")
+                new_pw = st.text_input("登录密码", type="password")
                 if st.form_submit_button("创建"):
-                    if new_name:
-                        pid = create_profile(new_name, new_email, new_phone)
+                    if new_name and new_pw:
+                        pid = create_profile(new_name, new_email, new_phone, new_pw)
                         set_active_profile(pid)
                         st.session_state["show_new_profile"] = False
                         st.success(f"已创建：{new_name}")
                         st.rerun()
+                    else:
+                        st.error("姓名和密码为必填")
+
+        st.divider()
+        active_info = {}
+        active_dir = get_profile_path(active)
+        if os.path.exists(os.path.join(active_dir, "info.json")):
+            with open(os.path.join(active_dir, "info.json"), "r", encoding="utf-8") as f:
+                active_info = json.load(f)
+
+        if st.button("🚪 退出登录", use_container_width=True):
+            st.session_state["logged_in"] = False
+            st.rerun()
 
         st.caption(f"📁 用户ID：{active}")
         st.caption(f"📝 投递记录：{len(records)}")
