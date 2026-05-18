@@ -3893,20 +3893,9 @@ def main():
     if "is_admin" not in st.session_state:
         st.session_state["is_admin"] = False
 
-    # 免登录模式：每个浏览器独立会话，数据仅存本地session，关闭即清
+    # 免登录模式：使用 default 用户，数据持久保存
     if not st.session_state["logged_in"]:
-        if "session_user_id" not in st.session_state:
-            st.session_state["session_user_id"] = str(uuid.uuid4())[:8]
-        # 确保会话用户目录存在
-        session_dir = get_profile_path(st.session_state["session_user_id"])
-        if not os.path.exists(os.path.join(session_dir, "info.json")):
-            with open(os.path.join(session_dir, "info.json"), "w", encoding="utf-8") as f:
-                json.dump({"name": "访客", "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"), "session_only": True}, f)
-            with open(os.path.join(session_dir, "experience_library.json"), "w", encoding="utf-8") as f:
-                json.dump({"basic": {}, "education": [], "skills": [], "experiences": [], "certifications": [], "personal_projects": [], "resume_directions": {}, "interview_entries": []}, f)
-            with open(os.path.join(session_dir, "application_history.json"), "w", encoding="utf-8") as f:
-                json.dump([], f)
-        set_active_profile(st.session_state["session_user_id"])
+        set_active_profile("default")
         st.session_state["logged_in"] = True
 
     # 管理员模式（仍可通过侧边栏手动切换）
@@ -3923,7 +3912,7 @@ def main():
         return
 
     st.title("🎯 JobMatcher")
-    st.warning("🔒 本地会话模式：数据仅保存在当前浏览器，关闭页面后丢失。请定期导出备份！", icon="🔒")
+    st.caption("🔓 免登录模式 · 数据自动保存")
     st.caption("v1.8 — JobMatcher：投递+分析+定制+求职信+面试预测+复盘+日程+背调+反馈")
 
     # 检查依赖
@@ -3974,15 +3963,8 @@ def main():
         ], key="nav")
 
         st.divider()
-        st.caption("🔒 本地会话模式")
-        st.caption("数据仅保存在当前浏览器")
-        st.caption("关闭页面后数据将丢失")
+        st.caption("🔓 免登录模式")
         st.caption(f"📝 投递记录：{len(records)}")
-        if st.button("💾 导出数据备份", use_container_width=True):
-            exp_lib = load_experience_lib()
-            backup = {"experience_library": exp_lib, "application_history": records}
-            st.download_button("⬇️ 下载备份", data=json.dumps(backup, ensure_ascii=False, indent=2),
-                file_name="jobmatcher_backup.json", mime="application/json", use_container_width=True)
         if st.button("🔄 刷新", use_container_width=True):
             st.rerun()
 
