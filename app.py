@@ -1273,7 +1273,7 @@ SEARCH_CITIES = ["上海", "北京", "沈阳", "杭州", "深圳", "广州", "�
 
 
 def load_jd_cache():
-        jd_cache_file = os.path.join(get_profile_path(get_active_profile()), "jd_cache.json")
+    jd_cache_file = os.path.join(get_profile_path(get_active_profile()), "jd_cache.json")
     if not os.path.exists(jd_cache_file):
         return []
     with open(jd_cache_file, "r", encoding="utf-8") as f:
@@ -3300,6 +3300,226 @@ def render_feedback():
 
 
 # ═══════════════════════════════════════
+# 后台管理系统
+# ═══════════════════════════════════════
+
+ADMIN_FILE = os.path.join(DATA_DIR, "admin.json")
+DEFAULT_ADMIN = {
+    "email": "admin@jobmatcher",
+    "password": hash_password("admin123"),
+    "name": "系统管理员",
+    "role": "admin",
+    "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+}
+
+def init_admin():
+    """初始化管理员账号"""
+    if not os.path.exists(ADMIN_FILE):
+        with open(ADMIN_FILE, "w", encoding="utf-8") as f:
+            json.dump(DEFAULT_ADMIN, f, ensure_ascii=False, indent=2)
+
+def get_admin():
+    if not os.path.exists(ADMIN_FILE):
+        init_admin()
+    with open(ADMIN_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_admin(admin_data):
+    with open(ADMIN_FILE, "w", encoding="utf-8") as f:
+        json.dump(admin_data, f, ensure_ascii=False, indent=2)
+
+def verify_admin(email, password):
+    admin = get_admin()
+    if email == admin["email"]:
+        return verify_password(password, admin["password"])
+    return False
+
+def load_all_feedback():
+    """收集所有用户的反馈"""
+    all_fb = []
+    if os.path.exists(PROFILES_DIR):
+        for uid in os.listdir(PROFILES_DIR):
+            fb_file = os.path.join(PROFILES_DIR, uid, FEEDBACK_FILE)
+            if os.path.exists(fb_file):
+                with open(fb_file, "r", encoding="utf-8") as f:
+                    user_fb = json.load(f)
+                # 获取用户名
+                info_file = os.path.join(PROFILES_DIR, uid, "info.json")
+                user_name = uid
+                if os.path.exists(info_file):
+                    with open(info_file, "r", encoding="utf-8") as f:
+                        info = json.load(f)
+                        user_name = info.get("name", uid)
+                for fb in user_fb:
+                    fb["user_name"] = user_name
+                    fb["user_id"] = uid
+                all_fb.extend(user_fb)
+    return sorted(all_fb, key=lambda x: x.get("created_at", ""), reverse=True)
+
+def get_system_stats():
+    """系统统计"""
+    users = list_profiles()
+    total_records = 0
+    total_experiences = 0
+    for u in users:
+        hist = get_history_file(u["id"])
+        if os.path.exists(hist):
+            with open(hist, "r", encoding="utf-8") as f:
+                total_records += len(json.load(f))
+        expf = get_exp_lib_file(u["id"])
+        if os.path.exists(expf):
+            with open(expf, "r", encoding="utf-8") as f:
+                exp = json.load(f)
+                total_experiences += len(exp.get("experiences", []))
+    return {
+        "total_users": len(users),
+        "total_applications": total_records,
+        "total_experiences": total_experiences,
+        "total_feedback": len(load_all_feedback()),
+    }
+
+def render_admin_panel():
+    """后台管理面板"""
+    st.title("🛡️ 后台管理系统")
+    st.caption(f"管理员：{get_admin()['email']}")
+
+    admin_tabs = st.tabs(["📊 概览", "💬 反馈管理", "👥 用户管理", "⚙️ 系统配置"])
+
+    # ── Tab1: 概览 ──
+    with admin_tabs[0]:
+        stats = get_system_stats()
+        col1, col2, col3, col4 = st.columns(4)
+        with col1: st.metric("总用户数", stats["total_users"])
+        with col2: st.metric("总投递记录", stats["total_applications"])
+        with col3: st.metric("总经历条目", stats["total_experiences"])
+        with col4: st.metric("总反馈数", stats["total_feedback"])
+
+        st.divider()
+        st.markdown("### 📋 用户列表")
+        users = list_profiles()
+        if users:
+            user_data = []
+            for u in users:
+                info_file = os.path.join(PROFILES_DIR, u["id"], "info.json")
+                last_login = ""
+                if os.path.exists(info_file):
+                    with open(info_file, "r", encoding="utf-8") as f:
+                        info = json.load(f)
+                        last_login = info.get("created_at", "")
+                user_data.append({
+                    "姓名": u.get("name", ""), "邮箱": u.get("email", ""),
+                    "ID": u["id"], "创建时间": last_login,
+                })
+            st.dataframe(pd.DataFrame(user_data), use_container_width=True, hide_index=True)
+
+    # ── Tab2: 反馈管理 ──
+    with admin_tabs[1]:
+        st.markdown("### 💬 用户反馈管理")
+        all_fb = load_all_feedback()
+        if not all_fb:
+            st.info("暂无用户反馈")
+        else:
+            # 筛选
+            fb_filter = st.selectbox("状态筛选", ["全部", "待处理", "处理中", "已完成"], key="admin_fb_filter")
+            filtered = all_fb
+            if fb_filter != "全部":
+                filtered = [f for f in all_fb if f.get("status", "待处理") == fb_filter]
+
+            for i, fb in enumerate(filtered):
+                status_color = {"待处理": "🟡", "处理中": "🟠", "已完成": "🟢"}.get(fb.get("status", ""), "⚪")
+                with st.expander(f"{status_color} [{fb.get('type','')}] {fb.get('title','')} — {fb.get('user_name','')} ({fb.get('created_at','')[:10]})"):
+                    st.markdown(f"**用户**：{fb.get('user_name','')} | **优先级**：{fb.get('priority','')}")
+                    st.markdown(f"**内容**：{fb.get('content','')}")
+                    col_f1, col_f2, col_f3 = st.columns(3)
+                    with col_f1:
+                        new_status = st.selectbox("状态", ["待处理", "处理中", "已完成"],
+                            index=["待处理", "处理中", "已完成"].index(fb.get("status", "待处理")),
+                            key=f"adm_status_{i}")
+                    with col_f2:
+                        admin_note = st.text_input("管理员备注", value=fb.get("admin_note", ""), key=f"adm_note_{i}")
+                    with col_f3:
+                        if st.button("💾 保存", key=f"adm_save_{i}"):
+                            fb["status"] = new_status
+                            fb["admin_note"] = admin_note
+                            all_fb_copy = load_all_feedback()
+                            for orig in all_fb_copy:
+                                if orig["id"] == fb["id"]:
+                                    orig["status"] = new_status
+                                    orig["admin_note"] = admin_note
+                                    # 写回对应用户的反馈文件
+                                    uid = orig.get("user_id", "")
+                                    if uid:
+                                        fb_file = os.path.join(PROFILES_DIR, uid, FEEDBACK_FILE)
+                                        if os.path.exists(fb_file):
+                                            with open(fb_file, "r", encoding="utf-8") as fh:
+                                                user_fb = json.load(fh)
+                                            for uf in user_fb:
+                                                if uf["id"] == fb["id"]:
+                                                    uf["status"] = new_status
+                                                    uf["admin_note"] = admin_note
+                                            with open(fb_file, "w", encoding="utf-8") as fh:
+                                                json.dump(user_fb, fh, ensure_ascii=False, indent=2)
+                                    break
+                            st.success("已保存")
+                            st.rerun()
+
+    # ── Tab3: 用户管理 ──
+    with admin_tabs[2]:
+        st.markdown("### 👥 用户管理")
+        users = list_profiles()
+        for u in users:
+            with st.expander(f"👤 {u.get('name','')} — {u.get('email','')} ({u['id']})"):
+                col_u1, col_u2 = st.columns(2)
+                with col_u1:
+                    st.markdown(f"**创建时间**：{u.get('created_at','')}")
+                    # 统计该用户数据
+                    hist = get_history_file(u["id"])
+                    app_count = 0
+                    if os.path.exists(hist):
+                        with open(hist, "r", encoding="utf-8") as f:
+                            app_count = len(json.load(f))
+                    st.markdown(f"**投递记录**：{app_count} 条")
+                with col_u2:
+                    st.markdown(f"**邮箱**：{u.get('email','')}")
+                    st.markdown(f"**手机**：{u.get('phone','')}")
+                if st.button("🔒 重置密码", key=f"reset_pw_{u['id']}"):
+                    # 重置为默认密码
+                    info_file = os.path.join(PROFILES_DIR, u["id"], "info.json")
+                    if os.path.exists(info_file):
+                        with open(info_file, "r", encoding="utf-8") as f:
+                            info = json.load(f)
+                        info["password"] = hash_password("123456")
+                        with open(info_file, "w", encoding="utf-8") as f:
+                            json.dump(info, f, ensure_ascii=False, indent=2)
+                        st.success(f"密码已重置为 123456")
+
+    # ── Tab4: 系统配置 ──
+    with admin_tabs[3]:
+        st.markdown("### ⚙️ 系统配置")
+        admin_data = get_admin()
+
+        with st.form("admin_config"):
+            st.caption("管理员账号设置")
+            new_admin_email = st.text_input("管理员邮箱", value=admin_data.get("email", ""))
+            new_admin_pw = st.text_input("新密码（留空不修改）", type="password")
+            new_admin_name = st.text_input("管理员名称", value=admin_data.get("name", ""))
+
+            if st.form_submit_button("💾 保存配置", type="primary", use_container_width=True):
+                admin_data["email"] = new_admin_email
+                admin_data["name"] = new_admin_name
+                if new_admin_pw:
+                    admin_data["password"] = hash_password(new_admin_pw)
+                save_admin(admin_data)
+                st.success("配置已保存")
+
+        st.divider()
+        st.markdown("### 📋 日志")
+        st.caption(f"系统启动时间：{datetime.now().strftime('%Y-%m-%d %H:%M')}")
+        st.caption(f"数据目录：{DATA_DIR}")
+        st.caption(f"用户目录：{PROFILES_DIR}")
+
+
+# ═══════════════════════════════════════
 # 主界面
 # ═══════════════════════════════════════
 
@@ -3335,19 +3555,21 @@ def login_screen():
                 st.markdown("### 🔐 登录")
                 login_email = st.text_input("邮箱", placeholder="输入注册邮箱")
                 login_pw = st.text_input("密码", type="password")
-                if st.form_submit_button("登录", type="primary", use_container_width=True):
-                    # 按邮箱查找用户
+                col_l1, col_l2 = st.columns(2)
+                with col_l1:
+                    submit_login = st.form_submit_button("用户登录", type="primary", use_container_width=True)
+                with col_l2:
+                    submit_admin = st.form_submit_button("🔑 管理员", use_container_width=True)
+
+                if submit_login:
                     found = None
                     for p in profiles:
                         if p.get("email") == login_email:
-                            found = p
-                            break
+                            found = p; break
                     if not found:
-                        # 兼容旧用户：按ID登录
                         for p in profiles:
                             if p["id"] == login_email:
-                                found = p
-                                break
+                                found = p; break
                     if not found:
                         st.error("用户不存在")
                     elif verify_login(found["id"], login_pw):
@@ -3356,6 +3578,14 @@ def login_screen():
                         st.rerun()
                     else:
                         st.error("密码错误")
+
+                if submit_admin:
+                    if verify_admin(login_email, login_pw):
+                        st.session_state["logged_in"] = True
+                        st.session_state["is_admin"] = True
+                        st.rerun()
+                    else:
+                        st.error("管理员验证失败")
 
             st.divider()
             st.caption("或")
@@ -3381,14 +3611,32 @@ def login_screen():
 
 
 def main():
+    # 初始化管理员
+    init_admin()
+
     # 登录检查
     if "logged_in" not in st.session_state:
         st.session_state["logged_in"] = False
     if "show_register" not in st.session_state:
         st.session_state["show_register"] = False
+    if "is_admin" not in st.session_state:
+        st.session_state["is_admin"] = False
 
     if not st.session_state["logged_in"]:
         login_screen()
+        return
+
+    # 管理员模式
+    if st.session_state.get("is_admin"):
+        render_admin_panel()
+        # 侧边栏最小化
+        with st.sidebar:
+            st.markdown("### 🛡️ 管理员模式")
+            if st.button("🚪 退出管理", use_container_width=True):
+                for key in list(st.session_state.keys()):
+                    del st.session_state[key]
+                st.session_state["logged_in"] = False
+                st.rerun()
         return
 
     st.title("🎯 JobMatcher")
