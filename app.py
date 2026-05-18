@@ -3893,9 +3893,24 @@ def main():
     if "is_admin" not in st.session_state:
         st.session_state["is_admin"] = False
 
-    # 免登录模式：使用 default 用户，数据持久保存
+    # 免登录模式：每台设备独立session ID，数据隔离且持久保存
     if not st.session_state["logged_in"]:
-        set_active_profile("default")
+        # 从 URL query params 或 session 获取设备标识
+        device_id = st.query_params.get("device", None)
+        if not device_id:
+            device_id = str(uuid.uuid4())[:8]
+            st.query_params["device"] = device_id
+            st.rerun()
+        set_active_profile(device_id)
+        # 确保该设备的数据目录存在
+        dev_dir = get_profile_path(device_id)
+        if not os.path.exists(os.path.join(dev_dir, "info.json")):
+            with open(os.path.join(dev_dir, "info.json"), "w", encoding="utf-8") as f:
+                json.dump({"name": f"设备{device_id}", "created_at": datetime.now().strftime("%Y-%m-%d %H:%M")}, f)
+            with open(os.path.join(dev_dir, "experience_library.json"), "w", encoding="utf-8") as f:
+                json.dump({"basic": {}, "education": [], "skills": [], "experiences": [], "certifications": [], "personal_projects": [], "resume_directions": {}, "interview_entries": []}, f)
+            with open(os.path.join(dev_dir, "application_history.json"), "w", encoding="utf-8") as f:
+                json.dump([], f)
         st.session_state["logged_in"] = True
 
     # 管理员模式（仍可通过侧边栏手动切换）
@@ -3912,7 +3927,8 @@ def main():
         return
 
     st.title("🎯 JobMatcher")
-    st.caption("🔓 免登录模式 · 数据自动保存")
+    device = st.query_params.get("device", "?")
+    st.caption(f"🔒 设备隔离模式 · 数据自动保存 · ID: {device[:6]}")
     st.caption("v1.8 — JobMatcher：投递+分析+定制+求职信+面试预测+复盘+日程+背调+反馈")
 
     # 检查依赖
@@ -3963,8 +3979,9 @@ def main():
         ], key="nav")
 
         st.divider()
-        st.caption("🔓 免登录模式")
+        st.caption("🔒 设备数据隔离")
         st.caption(f"📝 投递记录：{len(records)}")
+        st.caption("💡 收藏当前网址，下次打开数据还在")
         if st.button("🔄 刷新", use_container_width=True):
             st.rerun()
 
