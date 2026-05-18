@@ -2616,18 +2616,21 @@ def discover_jobs(exp_lib):
         )
         raw = ""
         for block in resp.content:
-            if hasattr(block, 'text') and block.text:
-                raw = block.text.strip(); break
+            if hasattr(block, 'text') and block.text and block.text.strip():
+                raw = block.text.strip()
+                break
+        if not raw:
+            raw = str(resp.content)
+        raw = re.sub(r'<thinking>.*?</thinking>', '', raw, flags=re.DOTALL)
         m = re.search(r'\[.*\]', raw, re.DOTALL)
         if m:
             jobs = json.loads(m.group())
-            # 为每个岗位做匹配打分
             for job in jobs:
                 job["id"] = str(uuid.uuid4())[:8]
                 job["source"] = "AI推荐"
                 job["discovered_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
             return jobs
-    except:
+    except Exception as e:
         pass
     return []
 
