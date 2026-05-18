@@ -18,6 +18,41 @@ try:
 except ImportError:
     HAS_ANTHROPIC = False
 
+# ── API 配置（Streamlit Cloud secrets → 环境变量 → 内置默认值）──
+def get_llm_config():
+    """获取LLM配置，优先级：st.secrets > 环境变量 > 默认值"""
+    config = {"base_url": "", "api_key": "", "model": ""}
+    for key in ["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_MODEL"]:
+        # 1. Streamlit Cloud secrets
+        try:
+            val = st.secrets.get(key, "")
+            if val:
+                config[key.lower().replace("anthropic_", "")] = val
+                continue
+        except:
+            pass
+        # 2. 环境变量
+        val = os.environ.get(key, "")
+        if val:
+            config[key.lower().replace("anthropic_", "")] = val
+            continue
+    # 3. 默认值（DeepSeek 兼容 Anthropic SDK）
+    if not config.get("base_url"):
+        config["base_url"] = "https://api.deepseek.com/anthropic"
+    if not config.get("model"):
+        config["model"] = "deepseek-v4-pro"
+    return config
+
+
+def get_anthropic_client():
+    """获取配置好的 Anthropic 客户端"""
+    if not HAS_ANTHROPIC:
+        return None
+    cfg = get_llm_config()
+    if not cfg.get("api_key"):
+        return None
+    return Anthropic(base_url=cfg["base_url"], api_key=cfg["api_key"])
+
 # ═══════════════════════════════════════
 # 配置
 # ═══════════════════════════════════════
@@ -602,10 +637,9 @@ def parse_jd_with_llm(jd_text):
         return {"error": "JD文本太短，请粘贴完整岗位描述"}
 
     try:
-        client = Anthropic(
-            base_url=os.environ.get("ANTHROPIC_BASE_URL", "https://api.deepseek.com/anthropic"),
-            api_key=os.environ.get("ANTHROPIC_AUTH_TOKEN", ""),
-        )
+        client = get_anthropic_client()
+        if not client:
+            return {"error": "API Key 未配置。请在 Streamlit Cloud Secrets 或 .env 中设置 ANTHROPIC_AUTH_TOKEN"}
         resp = client.messages.create(
             model=os.environ.get("ANTHROPIC_MODEL", "deepseek-v4-pro"),
             max_tokens=1500,
@@ -795,10 +829,9 @@ def score_match(jd_analysis, experience_lib):
     }
 
     try:
-        client = Anthropic(
-            base_url=os.environ.get("ANTHROPIC_BASE_URL", "https://api.deepseek.com/anthropic"),
-            api_key=os.environ.get("ANTHROPIC_AUTH_TOKEN", ""),
-        )
+        client = get_anthropic_client()
+        if not client:
+            return {"error": "API Key 未配置。请在 Streamlit Cloud Secrets 或 .env 中设置 ANTHROPIC_AUTH_TOKEN"}
         resp = client.messages.create(
             model=os.environ.get("ANTHROPIC_MODEL", "deepseek-v4-pro"),
             max_tokens=2000,
@@ -1656,10 +1689,9 @@ def parse_resume_text_with_llm(resume_text):
 }"""
 
     try:
-        client = Anthropic(
-            base_url=os.environ.get("ANTHROPIC_BASE_URL", "https://api.deepseek.com/anthropic"),
-            api_key=os.environ.get("ANTHROPIC_AUTH_TOKEN", ""),
-        )
+        client = get_anthropic_client()
+        if not client:
+            return {"error": "API Key 未配置。请在 Streamlit Cloud Secrets 或 .env 中设置 ANTHROPIC_AUTH_TOKEN"}
         resp = client.messages.create(
             model=os.environ.get("ANTHROPIC_MODEL", "deepseek-v4-pro"),
             max_tokens=3000, temperature=0.1,
@@ -1783,10 +1815,9 @@ def analyze_career(exp_lib):
     }
 
     try:
-        client = Anthropic(
-            base_url=os.environ.get("ANTHROPIC_BASE_URL", "https://api.deepseek.com/anthropic"),
-            api_key=os.environ.get("ANTHROPIC_AUTH_TOKEN", ""),
-        )
+        client = get_anthropic_client()
+        if not client:
+            return {"error": "API Key 未配置。请在 Streamlit Cloud Secrets 或 .env 中设置 ANTHROPIC_AUTH_TOKEN"}
         resp = client.messages.create(
             model=os.environ.get("ANTHROPIC_MODEL", "deepseek-v4-pro"),
             max_tokens=3000, temperature=0.3,
@@ -2310,10 +2341,9 @@ def analyze_interview_entry(entry, exp_lib):
 请用中文输出50字以内的优化建议（只输出建议文本）："""
 
     try:
-        client = Anthropic(
-            base_url=os.environ.get("ANTHROPIC_BASE_URL", "https://api.deepseek.com/anthropic"),
-            api_key=os.environ.get("ANTHROPIC_AUTH_TOKEN", ""),
-        )
+        client = get_anthropic_client()
+        if not client:
+            return {"error": "API Key 未配置。请在 Streamlit Cloud Secrets 或 .env 中设置 ANTHROPIC_AUTH_TOKEN"}
         resp = client.messages.create(
             model=os.environ.get("ANTHROPIC_MODEL", "deepseek-v4-pro"),
             max_tokens=150, temperature=0.3,
@@ -2531,8 +2561,9 @@ def generate_cover_letter(jd_analysis, resume_text, exp_lib):
 请输出纯文本求职信（不要称呼，不要标题）："""
 
     try:
-        client = Anthropic(base_url=os.environ.get("ANTHROPIC_BASE_URL", "https://api.deepseek.com/anthropic"),
-                          api_key=os.environ.get("ANTHROPIC_AUTH_TOKEN", ""))
+        client = get_anthropic_client()
+        if not client:
+            return "API Key 未配置"
         resp = client.messages.create(model=os.environ.get("ANTHROPIC_MODEL", "deepseek-v4-pro"),
             max_tokens=500, temperature=0.5,
             messages=[{"role": "user", "content": prompt}])
@@ -2563,8 +2594,9 @@ def predict_interview_questions(jd_analysis, exp_lib):
 [{{"question":"问题","why":"为什么问这个","framework":"回答框架要点","key_points":["要点1","要点2"]}}]"""
 
     try:
-        client = Anthropic(base_url=os.environ.get("ANTHROPIC_BASE_URL", "https://api.deepseek.com/anthropic"),
-                          api_key=os.environ.get("ANTHROPIC_AUTH_TOKEN", ""))
+        client = get_anthropic_client()
+        if not client:
+            return "API Key 未配置"
         resp = client.messages.create(model=os.environ.get("ANTHROPIC_MODEL", "deepseek-v4-pro"),
             max_tokens=2000, temperature=0.5,
             system="只输出合法JSON。",
@@ -2785,8 +2817,9 @@ def analyze_interview_review(review):
     ])
 
     try:
-        client = Anthropic(base_url=os.environ.get("ANTHROPIC_BASE_URL", "https://api.deepseek.com/anthropic"),
-                          api_key=os.environ.get("ANTHROPIC_AUTH_TOKEN", ""))
+        client = get_anthropic_client()
+        if not client:
+            return "API Key 未配置"
         resp = client.messages.create(model=os.environ.get("ANTHROPIC_MODEL", "deepseek-v4-pro"),
             max_tokens=1500, temperature=0.3,
             system="只输出合法JSON。",
