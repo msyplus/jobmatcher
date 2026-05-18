@@ -2710,7 +2710,7 @@ def render_auto_apply():
                     col_link, col_score, col_act = st.columns([2, 1, 1])
                     with col_link:
                         if job.get("apply_url"):
-                            st.markdown(f"🔗 [{job['apply_url']}]({job['apply_url']})")
+                            st.link_button("🔗 打开投递链接", job["apply_url"])
                     with col_score:
                         st.markdown(f"匹配：<span style='color:{score_color};font-size:14pt'>{quick_score}</span>/100", unsafe_allow_html=True)
                     with col_act:
