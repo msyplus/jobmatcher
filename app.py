@@ -55,9 +55,10 @@ def get_anthropic_client():
     if not HAS_ANTHROPIC:
         return None
     cfg = get_llm_config()
-    if not cfg.get("api_key"):
+    api_key = cfg.get("api_key") or cfg.get("auth_token") or ""
+    if not api_key:
         return None
-    return Anthropic(base_url=cfg["base_url"], api_key=cfg["api_key"])
+    return Anthropic(base_url=cfg.get("base_url", "https://api.deepseek.com/anthropic"), api_key=api_key)
 
 # ═══════════════════════════════════════
 # 配置
