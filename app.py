@@ -355,6 +355,8 @@ DIRECTIONS = ["AI产品运营", "服务体验运营", "AI项目管理", "通用"
 # ═══════════════════════════════════════
 
 def load_history():
+    if st.session_state.get("is_guest"):
+        return st.session_state.get("guest_history", [])
     fpath = _current_history_file()
     if not os.path.exists(fpath):
         return []
@@ -363,11 +365,16 @@ def load_history():
 
 
 def save_history(records):
+    if st.session_state.get("is_guest"):
+        st.session_state["guest_history"] = records
+        return
     with open(_current_history_file(), "w", encoding="utf-8") as f:
         json.dump(records, f, ensure_ascii=False, indent=2)
 
 
 def load_experience_lib():
+    if st.session_state.get("is_guest"):
+        return st.session_state.get("guest_exp_lib", {})
     fpath = _current_exp_lib_file()
     if not os.path.exists(fpath):
         return {}
@@ -2400,6 +2407,9 @@ def analyze_interview_entry(entry, exp_lib):
 
 def save_experience_lib(exp_lib):
     """保存经验库"""
+    if st.session_state.get("is_guest"):
+        st.session_state["guest_exp_lib"] = exp_lib
+        return
     with open(_current_exp_lib_file(), "w", encoding="utf-8") as f:
         json.dump(exp_lib, f, ensure_ascii=False, indent=2)
 
@@ -3804,7 +3814,6 @@ def login_screen():
     with col_m:
         profiles = list_profiles()
         if not profiles:
-            # 首次使用：创建默认用户
             with st.form("first_login"):
                 st.markdown("### 👋 欢迎首次使用")
                 name = st.text_input("姓名", value="牟思雨")
@@ -3821,6 +3830,16 @@ def login_screen():
                         set_active_profile(pid)
                         st.session_state["logged_in"] = True
                         st.rerun()
+
+            st.divider()
+            st.caption("或")
+            if st.button("🔓 免登录试用（数据不保存）", use_container_width=True):
+                st.session_state["logged_in"] = True
+                st.session_state["is_guest"] = True
+                # 访客使用内存存储
+                st.session_state["guest_exp_lib"] = {"basic": {}, "education": [], "skills": [], "experiences": [], "certifications": [], "personal_projects": [], "resume_directions": {}, "interview_entries": []}
+                st.session_state["guest_history"] = []
+                st.rerun()
         else:
             with st.form("login_form"):
                 st.markdown("### 🔐 登录")
@@ -3859,10 +3878,18 @@ def login_screen():
                         st.error("管理员验证失败")
 
             st.divider()
-            st.caption("或")
-            if st.button("➕ 创建新用户", use_container_width=True):
-                st.session_state["show_register"] = True
-                st.rerun()
+            col_b1, col_b2 = st.columns(2)
+            with col_b1:
+                if st.button("➕ 注册新用户", use_container_width=True):
+                    st.session_state["show_register"] = True
+                    st.rerun()
+            with col_b2:
+                if st.button("🔓 免登录试用", use_container_width=True):
+                    st.session_state["logged_in"] = True
+                    st.session_state["is_guest"] = True
+                    st.session_state["guest_exp_lib"] = {"basic": {}, "education": [], "skills": [], "experiences": [], "certifications": [], "personal_projects": [], "resume_directions": {}, "interview_entries": []}
+                    st.session_state["guest_history"] = []
+                    st.rerun()
 
         if st.session_state.get("show_register"):
             with st.form("register_form"):
@@ -3893,25 +3920,14 @@ def main():
     if "is_admin" not in st.session_state:
         st.session_state["is_admin"] = False
 
-    # 免登录模式：每台设备独立session ID，数据隔离且持久保存
+    # 登录检查：已登录用户正常使用，未登录进入登录/试用选择页
     if not st.session_state["logged_in"]:
-        # 从 URL query params 或 session 获取设备标识
-        device_id = st.query_params.get("device", None)
-        if not device_id:
-            device_id = str(uuid.uuid4())[:8]
-            st.query_params["device"] = device_id
-            st.rerun()
-        set_active_profile(device_id)
-        # 确保该设备的数据目录存在
-        dev_dir = get_profile_path(device_id)
-        if not os.path.exists(os.path.join(dev_dir, "info.json")):
-            with open(os.path.join(dev_dir, "info.json"), "w", encoding="utf-8") as f:
-                json.dump({"name": f"设备{device_id}", "created_at": datetime.now().strftime("%Y-%m-%d %H:%M")}, f)
-            with open(os.path.join(dev_dir, "experience_library.json"), "w", encoding="utf-8") as f:
-                json.dump({"basic": {}, "education": [], "skills": [], "experiences": [], "certifications": [], "personal_projects": [], "resume_directions": {}, "interview_entries": []}, f)
-            with open(os.path.join(dev_dir, "application_history.json"), "w", encoding="utf-8") as f:
-                json.dump([], f)
-        st.session_state["logged_in"] = True
+        login_screen()
+        return
+
+    # 访客模式标识
+    if st.session_state.get("is_guest"):
+        st.warning("🔒 试用模式：数据不会保存，刷新后丢失。登录后可永久保存数据。", icon="🔒")
 
     # 管理员模式（仍可通过侧边栏手动切换）
     if st.session_state.get("is_admin"):
@@ -3927,8 +3943,6 @@ def main():
         return
 
     st.title("🎯 JobMatcher")
-    device = st.query_params.get("device", "?")
-    st.caption(f"🔒 设备隔离模式 · 数据自动保存 · ID: {device[:6]}")
     st.caption("v1.8 — JobMatcher：投递+分析+定制+求职信+面试预测+复盘+日程+背调+反馈")
 
     # 检查依赖
@@ -3964,6 +3978,8 @@ def main():
         st.session_state["apply_step"] = 1
     if "discovered_jobs" not in st.session_state:
         st.session_state["discovered_jobs"] = None
+    if "is_guest" not in st.session_state:
+        st.session_state["is_guest"] = False
 
     records = load_history()
 
@@ -3979,9 +3995,16 @@ def main():
         ], key="nav")
 
         st.divider()
-        st.caption("🔒 设备数据隔离")
-        st.caption(f"📝 投递记录：{len(records)}")
-        st.caption("💡 收藏当前网址，下次打开数据还在")
+        if st.session_state.get("is_guest"):
+            st.caption("🔒 试用模式 · 数据不保存")
+            st.caption(f"📝 投递记录：{len(records)}")
+            if st.button("🔐 注册/登录以保存数据", use_container_width=True, type="primary"):
+                st.session_state["logged_in"] = False
+                st.session_state["is_guest"] = False
+                st.rerun()
+        else:
+            st.caption("✅ 已登录 · 数据自动保存")
+            st.caption(f"📝 投递记录：{len(records)}")
         if st.button("🔄 刷新", use_container_width=True):
             st.rerun()
 
