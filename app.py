@@ -2685,15 +2685,17 @@ def render_auto_apply():
     with tab_d1:
         st.caption("AI根据你的经历库，主动搜索当前市场上最匹配的在招岗位")
 
-        if st.button("🔍 发现匹配岗位", type="primary", use_container_width=True):
-            with st.spinner("AI正在扫描市场岗位..."):
-                discovered = discover_jobs(exp_lib)
-                st.session_state["discovered_jobs"] = discovered
-                st.rerun()
+        # 自动加载推荐岗位
+        if "discovered_jobs" not in st.session_state or not st.session_state["discovered_jobs"]:
+            st.session_state["discovered_jobs"] = discover_jobs(exp_lib)
 
-        if st.session_state.get("discovered_jobs"):
-            discovered = st.session_state["discovered_jobs"]
-            st.success(f"发现 {len(discovered)} 个匹配岗位")
+        discovered = st.session_state["discovered_jobs"] or []
+        if discovered:
+            st.success(f"共 {len(discovered)} 个匹配岗位")
+
+            if st.button("🔄 AI刷新推荐", use_container_width=True):
+                st.session_state["discovered_jobs"] = discover_jobs(exp_lib)
+                st.rerun()
 
             for i, job in enumerate(discovered):
                 quick_score = estimate_quick_match(job, exp_lib)
@@ -2736,7 +2738,7 @@ def render_auto_apply():
                             st.success(f"已添加：{job['company']}")
                             st.rerun()
         else:
-            st.info("👆 点击上方按钮，AI将根据你的经历库主动发现匹配岗位")
+            st.warning("暂未发现匹配岗位，请点击刷新重试")
 
     # ═══ Tab 2: 已有待投递 ═══
     with tab_d2:
