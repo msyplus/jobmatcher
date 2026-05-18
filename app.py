@@ -2467,6 +2467,86 @@ def save_experience_lib(exp_lib):
 # 模块8：半自动投递
 # ═══════════════════════════════════════
 
+def estimate_quick_match(job, exp_lib):
+    """快速估算匹配度（无需LLM）"""
+    score = 50
+    job_skills = set(s.lower() for s in job.get("hard_skills", []))
+    my_skills = set(s["name"].lower() for s in exp_lib.get("skills", []))
+    if job_skills:
+        overlap = len(job_skills & my_skills) / len(job_skills)
+        score += int(overlap * 30)
+    my_directions = list(exp_lib.get("resume_directions", {}).keys())
+    job_dir = job.get("direction", "")
+    if any(d in job_dir for d in my_directions):
+        score += 15
+    return min(score, 98)
+
+
+JOB_DISCOVERY_PROMPT = """你是招聘市场分析师。根据候选人的经历库，推荐5个当前市场上最匹配的真实在招岗位。
+
+## 候选人档案
+- 方向：{directions}
+- 核心技能：{skills}
+- 工作经验：{experience_summary}
+- 目标城市：{cities}
+- 薪资期望：{salary_range}
+
+## 输出要求
+1. 推荐真实存在的公司和岗位（基于2026年5月市场情况）
+2. 每个岗位说明为什么匹配
+3. 给出薪资范围估算
+
+输出JSON数组：
+[{{"company":"公司","position":"岗位","city":"城市","salary":"薪资范围","direction":"方向","match_reason":"匹配原因(30字)","hard_skills":["要求技能"]}}]"""
+
+
+def discover_jobs(exp_lib):
+    """AI主动发现匹配岗位"""
+    if not HAS_ANTHROPIC:
+        return []
+
+    directions = list(exp_lib.get("resume_directions", {}).keys())
+    skills = [s["name"] for s in exp_lib.get("skills", []) if s.get("level") in ["expert", "advanced"]]
+    cities = exp_lib.get("basic", {}).get("cities", ["上海", "北京"])
+    salary_range = f"{exp_lib.get('basic',{}).get('salary_min',18)}k-{exp_lib.get('basic',{}).get('salary_max',26)}k"
+    exp_summary = "、".join([e["summary"] for e in exp_lib.get("experiences", [])[:3]])
+
+    prompt = JOB_DISCOVERY_PROMPT.format(
+        directions="、".join(directions[:3]) if directions else "AI产品运营/服务体验运营",
+        skills="、".join(skills[:10]),
+        experience_summary=exp_summary[:200],
+        cities="、".join(cities[:4]) if isinstance(cities, list) else str(cities),
+        salary_range=salary_range,
+    )
+
+    try:
+        client = get_anthropic_client()
+        if not client:
+            return []
+        resp = client.messages.create(
+            model=os.environ.get("ANTHROPIC_MODEL", "deepseek-v4-pro"),
+            max_tokens=1500, temperature=0.5,
+            system="只输出合法JSON数组。基于2026年5月市场真实情况推荐，不确定的标注'需核实'。",
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = ""
+        for block in resp.content:
+            if hasattr(block, 'text') and block.text:
+                raw = block.text.strip(); break
+        m = re.search(r'\[.*\]', raw, re.DOTALL)
+        if m:
+            jobs = json.loads(m.group())
+            # 为每个岗位做匹配打分
+            for job in jobs:
+                job["id"] = str(uuid.uuid4())[:8]
+                job["source"] = "AI推荐"
+                job["discovered_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+            return jobs
+    except:
+        pass
+    return []
+
+
 def render_auto_apply():
     """半自动投递页面（v2.0 重构：推荐+填表+状态联动）"""
     st.subheader("🚀 智能投递中心")
@@ -2474,11 +2554,70 @@ def render_auto_apply():
     records = load_history()
     exp_lib = load_experience_lib()
 
-    # ── 顶部：岗位推荐 ──
-    st.markdown("### 🎯 匹配岗位推荐")
-    st.caption("基于你的经历库和投递方向，AI推荐最匹配的待投递岗位")
+    # ── Tab: 主动发现 vs 已有岗位 ──
+    tab_d1, tab_d2 = st.tabs(["🔍 AI岗位发现", "📋 我的待投递"])
 
-    pending = [r for r in records if r.get("status") in ["待投递", "已投递"]]
+    # ═══ Tab 1: AI主动发现岗位 ═══
+    with tab_d1:
+        st.caption("AI根据你的经历库，主动搜索当前市场上最匹配的在招岗位")
+
+        if st.button("🔍 发现匹配岗位", type="primary", use_container_width=True):
+            with st.spinner("AI正在扫描市场岗位..."):
+                discovered = discover_jobs(exp_lib)
+                st.session_state["discovered_jobs"] = discovered
+                st.rerun()
+
+        if st.session_state.get("discovered_jobs"):
+            discovered = st.session_state["discovered_jobs"]
+            st.success(f"发现 {len(discovered)} 个匹配岗位")
+
+            for i, job in enumerate(discovered):
+                with st.container():
+                    col_j1, col_j2, col_j3 = st.columns([4, 2, 1.5])
+                    with col_j1:
+                        st.markdown(f"**{job.get('company','')}** — {job.get('position','')}")
+                        st.caption(f"📍 {job.get('city','')} | 💰 {job.get('salary','')} | 🏷️ {job.get('direction','')}")
+                        if job.get("match_reason"):
+                            st.caption(f"💡 {job['match_reason']}")
+                        if job.get("hard_skills"):
+                            st.caption(f"🔧 {' · '.join(job['hard_skills'][:5])}")
+                    with col_j2:
+                        # 快速匹配度估算
+                        quick_score = estimate_quick_match(job, exp_lib)
+                        score_color = "#66BB6A" if quick_score >= 80 else "#FFA726" if quick_score >= 60 else "#FF4444"
+                        st.markdown(f"预估匹配：<span style='color:{score_color};font-size:14pt'>{quick_score}</span>/100", unsafe_allow_html=True)
+                    with col_j3:
+                        if st.button("➕ 追踪", key=f"track_{i}", use_container_width=True):
+                            # 创建投递记录
+                            new_record = {
+                                "id": str(uuid.uuid4())[:8],
+                                "company": job.get("company", ""),
+                                "position": job.get("position", ""),
+                                "city": job.get("city", ""),
+                                "direction": job.get("direction", "通用"),
+                                "salary": job.get("salary", ""),
+                                "platform": "AI推荐",
+                                "contact": "",
+                                "status": "待投递",
+                                "jd_text": f"AI推荐岗位：{job.get('company','')} - {job.get('position','')}\n要求：{'、'.join(job.get('hard_skills',[]))}",
+                                "notes": f"匹配原因：{job.get('match_reason','')}",
+                                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                                "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                                "history": [{"status": "待投递", "time": datetime.now().strftime("%Y-%m-%d %H:%M")}],
+                            }
+                            records.append(new_record)
+                            save_history(records)
+                            st.success(f"已添加：{job['company']}")
+                            st.rerun()
+                    st.divider()
+        else:
+            st.info("👆 点击上方按钮，AI将根据你的经历库主动发现匹配岗位")
+
+    # ═══ Tab 2: 已有待投递 ═══
+    with tab_d2:
+        st.caption("你已录入的待投递岗位，按匹配度排序")
+
+        pending = [r for r in records if r.get("status") in ["待投递", "已投递"]]
 
     if not pending:
         st.info("📭 暂无待投递岗位。请先在「JD分析」中录入目标岗位。")
@@ -3805,6 +3944,8 @@ def main():
         st.session_state["apply_target"] = None
     if "apply_step" not in st.session_state:
         st.session_state["apply_step"] = 1
+    if "discovered_jobs" not in st.session_state:
+        st.session_state["discovered_jobs"] = None
 
     records = load_history()
 
