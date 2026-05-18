@@ -1,5 +1,5 @@
 """
-JobMatcher — AI 智能投递管理工具 v1.7
+JobMatcher — AI 智能投递管理工具 · 离线版
 """
 
 import streamlit as st
@@ -334,7 +334,8 @@ def migrate_legacy_data():
 
 # 种子数据：仅对指定用户加载真实经历库，其他用户生成模拟数据
 SEED_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "seed_experience_library.json")
-DEVICE_SECRET = "msy2026"  # 只有URL带此密钥的设备才能加载真实数据
+DEVICE_SECRET = "msy2026"
+OFFLINE_MODE = True  # 离线版标记
 
 MOCK_EXPERIENCE_LIB = {
     "basic": {"name": "张明", "phone": "138****1234", "email": "demo@example.com"},
@@ -373,11 +374,11 @@ MOCK_EXPERIENCE_LIB = {
 }
 
 def is_owner_device():
-    """检查当前设备是否是真实数据所有者"""
-    # 1. session已授权
+    """离线版始终为真实数据设备"""
+    if OFFLINE_MODE:
+        return True
     if st.session_state.get("device_authorized"):
         return True
-    # 2. URL含密钥
     if st.query_params.get("key", "") == DEVICE_SECRET:
         st.session_state["device_authorized"] = True
         return True
@@ -2568,17 +2569,17 @@ def estimate_quick_match(job, exp_lib):
     return min(score, 98)
 
 
-JOB_DISCOVERY_PROMPT = """你是招聘市场分析师。根据候选人的经历库，推荐5个当前市场上最匹配的真实在招岗位。必须输出JSON数组，每个元素包含company/position/city/salary/direction/match_reason/hard_skills。
+JOB_DISCOVERY_PROMPT = """你是招聘市场分析师。根据候选人经历库推荐5个真实在招岗位。输出JSON数组。
 
-候选人档案：
-- 求职方向：{directions}
-- 核心技能：{skills}
-- 经历摘要：{experience_summary}
-- 目标城市：{cities}
-- 薪资：{salary_range}
+候选人：方向={directions}，技能={skills}，经历={experience_summary}，城市={cities}，薪资={salary_range}
 
-输出格式（严格JSON数组，不要解释）：
-[{{"company":"公司名","position":"岗位名","city":"城市","salary":"薪资","direction":"方向","match_reason":"为什么匹配(20字)","hard_skills":["技能1","技能2"]}}]"""
+规则：
+- company必须是真实公司全名（如美团/字节跳动/百度/京东/得物/小红书/滴滴），禁止用"某公司"
+- apply_url生成Boss直聘真实搜索链接：https://www.zhipin.com/web/geek/job?query=URL编码的岗位名&city=城市代码(上海101020100/北京101010100/沈阳101070100/杭州101030100)
+- jd_brief写50字岗位描述
+
+输出JSON数组：
+[{{"company":"公司全名","position":"岗位","city":"城市","salary":"薪资","direction":"方向","match_reason":"匹配原因","hard_skills":["技能"],"apply_url":"Boss链接","jd_brief":"50字简介"}}]"""
 
 
 def discover_jobs(exp_lib):
@@ -2606,28 +2607,45 @@ def discover_jobs(exp_lib):
             return []
         resp = client.messages.create(
             model=os.environ.get("ANTHROPIC_MODEL", "deepseek-v4-pro"),
-            max_tokens=1500, temperature=0.5,
+            max_tokens=2500, temperature=0.5,
             system="只输出合法JSON数组。基于2026年5月市场真实情况推荐，不确定的标注'需核实'。",
             messages=[{"role": "user", "content": prompt}],
         )
         raw = ""
         for block in resp.content:
+            # 跳过 thinking block
             if hasattr(block, 'text') and block.text and block.text.strip():
                 raw = block.text.strip()
                 break
         if not raw:
+            # 尝试从 content 直接获取
             raw = str(resp.content)
+        # 清理thinking标签
         raw = re.sub(r'<thinking>.*?</thinking>', '', raw, flags=re.DOTALL)
         m = re.search(r'\[.*\]', raw, re.DOTALL)
         if m:
-            jobs = json.loads(m.group())
+            try:
+                jobs = json.loads(m.group())
+            except json.JSONDecodeError:
+                # 截断修复
+                fixed = m.group().rstrip().rstrip(',').rstrip()
+                if not fixed.endswith(']'):
+                    # 找到最后一个完整的对象
+                    last_complete = fixed.rfind('"}')
+                    if last_complete > 0:
+                        fixed = fixed[:last_complete+2] + '\n]'
+                try:
+                    jobs = json.loads(fixed)
+                except:
+                    return []
             for job in jobs:
                 job["id"] = str(uuid.uuid4())[:8]
                 job["source"] = "AI推荐"
                 job["discovered_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
             return jobs
+        return []
     except Exception as e:
-        pass
+        return []
     return []
 
 
@@ -2656,23 +2674,25 @@ def render_auto_apply():
             st.success(f"发现 {len(discovered)} 个匹配岗位")
 
             for i, job in enumerate(discovered):
-                with st.container():
-                    col_j1, col_j2, col_j3 = st.columns([4, 2, 1.5])
-                    with col_j1:
-                        st.markdown(f"**{job.get('company','')}** — {job.get('position','')}")
-                        st.caption(f"📍 {job.get('city','')} | 💰 {job.get('salary','')} | 🏷️ {job.get('direction','')}")
-                        if job.get("match_reason"):
-                            st.caption(f"💡 {job['match_reason']}")
-                        if job.get("hard_skills"):
-                            st.caption(f"🔧 {' · '.join(job['hard_skills'][:5])}")
-                    with col_j2:
-                        # 快速匹配度估算
-                        quick_score = estimate_quick_match(job, exp_lib)
-                        score_color = "#66BB6A" if quick_score >= 80 else "#FFA726" if quick_score >= 60 else "#FF4444"
-                        st.markdown(f"预估匹配：<span style='color:{score_color};font-size:14pt'>{quick_score}</span>/100", unsafe_allow_html=True)
-                    with col_j3:
+                quick_score = estimate_quick_match(job, exp_lib)
+                score_color = "#66BB6A" if quick_score >= 80 else "#FFA726" if quick_score >= 60 else "#FF4444"
+                with st.expander(
+                    f"🏢 {job.get('company','')} — {job.get('position','')} | 💰 {job.get('salary','')} | 匹配{quick_score}分",
+                    expanded=(i==0)
+                ):
+                    if job.get("jd_brief"):
+                        st.markdown(f"📋 {job['jd_brief']}")
+                    st.caption(f"📍 {job.get('city','')} | 🏷️ {job.get('direction','')} | 💡 {job.get('match_reason','')}")
+                    if job.get("hard_skills"):
+                        st.caption(f"🔧 {' · '.join(job['hard_skills'][:5])}")
+                    col_link, col_score, col_act = st.columns([2, 1, 1])
+                    with col_link:
+                        if job.get("apply_url"):
+                            st.markdown(f"🔗 [{job['apply_url']}]({job['apply_url']})")
+                    with col_score:
+                        st.markdown(f"匹配：<span style='color:{score_color};font-size:14pt'>{quick_score}</span>/100", unsafe_allow_html=True)
+                    with col_act:
                         if st.button("➕ 追踪", key=f"track_{i}", use_container_width=True):
-                            # 创建投递记录
                             new_record = {
                                 "id": str(uuid.uuid4())[:8],
                                 "company": job.get("company", ""),
@@ -2683,7 +2703,7 @@ def render_auto_apply():
                                 "platform": "AI推荐",
                                 "contact": "",
                                 "status": "待投递",
-                                "jd_text": f"AI推荐岗位：{job.get('company','')} - {job.get('position','')}\n要求：{'、'.join(job.get('hard_skills',[]))}",
+                                "jd_text": f"AI推荐：{job.get('company','')} - {job.get('position','')}\n{job.get('jd_brief','')}\n链接：{job.get('apply_url','')}\n要求：{'、'.join(job.get('hard_skills',[]))}",
                                 "notes": f"匹配原因：{job.get('match_reason','')}",
                                 "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
                                 "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -2693,7 +2713,6 @@ def render_auto_apply():
                             save_history(records)
                             st.success(f"已添加：{job['company']}")
                             st.rerun()
-                    st.divider()
         else:
             st.info("👆 点击上方按钮，AI将根据你的经历库主动发现匹配岗位")
 
@@ -2704,17 +2723,7 @@ def render_auto_apply():
         pending = [r for r in records if r.get("status") in ["待投递", "已投递"]]
 
     if not pending:
-        st.info("📭 暂无待投递岗位。请先在「JD分析」中录入目标岗位。")
-        # 引导入口
-        col_e1, col_e2 = st.columns(2)
-        with col_e1:
-            if st.button("🔍 去JD分析", use_container_width=True, type="primary"):
-                st.session_state["nav"] = "🔍 JD分析"
-                st.rerun()
-        with col_e2:
-            if st.button("🌐 去JD搜索", use_container_width=True):
-                st.session_state["nav"] = "🌐 JD搜索"
-                st.rerun()
+        st.info("📭 暂无待投递岗位。请在侧边栏「🔍 JD分析」或「🌐 JD搜索」中录入目标岗位。")
         return
 
     # 按匹配度排序推荐
@@ -4011,7 +4020,12 @@ def main():
     if "is_admin" not in st.session_state:
         st.session_state["is_admin"] = False
 
-    # 登录检查：已登录用户正常使用，未登录进入登录/试用选择页
+    # 离线版：自动登录
+    if OFFLINE_MODE and not st.session_state["logged_in"]:
+        set_active_profile("default")
+        init_user_data("default")
+        st.session_state["logged_in"] = True
+
     if not st.session_state["logged_in"]:
         login_screen()
         return
@@ -4037,9 +4051,8 @@ def main():
                 st.rerun()
         return
 
-    st.title("🎯 JobMatcher")
-    if is_owner_device():
-        st.success("🔑 已识别为真实数据设备", icon="🔑")
+    st.title("🎯 JobMatcher · 离线版")
+    st.caption("📂 数据存储在本地，你的经历库已预装")
     # 不暴露密钥状态给其他设备
     st.caption("v1.8 — JobMatcher：投递+分析+定制+求职信+面试预测+复盘+日程+背调+反馈")
 
