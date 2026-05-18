@@ -2468,110 +2468,242 @@ def save_experience_lib(exp_lib):
 # ═══════════════════════════════════════
 
 def render_auto_apply():
-    """半自动投递页面"""
-    st.subheader("🚀 半自动投递")
+    """半自动投递页面（v2.0 重构：推荐+填表+状态联动）"""
+    st.subheader("🚀 智能投递中心")
 
     records = load_history()
-    # 筛选待投递状态的记录
+    exp_lib = load_experience_lib()
+
+    # ── 顶部：岗位推荐 ──
+    st.markdown("### 🎯 匹配岗位推荐")
+    st.caption("基于你的经历库和投递方向，AI推荐最匹配的待投递岗位")
+
     pending = [r for r in records if r.get("status") in ["待投递", "已投递"]]
 
     if not pending:
-        st.info("📭 没有待投递的岗位。请先在「JD分析」或「新增投递」中录入。")
+        st.info("📭 暂无待投递岗位。请先在「JD分析」中录入目标岗位。")
+        # 引导入口
+        col_e1, col_e2 = st.columns(2)
+        with col_e1:
+            if st.button("🔍 去JD分析", use_container_width=True, type="primary"):
+                st.session_state["nav"] = "🔍 JD分析"
+                st.rerun()
+        with col_e2:
+            if st.button("🌐 去JD搜索", use_container_width=True):
+                st.session_state["nav"] = "🌐 JD搜索"
+                st.rerun()
         return
 
-    st.markdown("### 📋 待投递岗位")
-    st.caption("选择岗位 → 准备申请材料 → 复制材料 → 去招聘平台手动提交 → 回来更新状态")
+    # 按匹配度排序推荐
+    sorted_pending = sorted(pending, key=lambda r: r.get("match_result", {}).get("overall_score", 0), reverse=True)
 
-    for i, record in enumerate(pending):
+    # 推荐卡片
+    for i, record in enumerate(sorted_pending[:5]):  # Top 5推荐
+        match = record.get("match_result", {})
+        score = match.get("overall_score", 0) if match else 0
         has_resume = bool(record.get("customized_resume"))
-        has_match = bool(record.get("match_result"))
 
-        with st.expander(
-            f"{'✅' if has_resume else '📝'} [{record.get('status','')}] {record['company']} — {record['position']} "
-            f"({record.get('city','')}){' — 已定制简历' if has_resume else ''}",
-            expanded=(i == 0),
-        ):
-            col_info, col_action = st.columns([3, 2])
+        score_color = "#66BB6A" if score >= 80 else "#FFA726" if score >= 60 else "#FF4444"
+        status_badge = {"待投递": "🟡", "已投递": "🔵"}.get(record.get("status", ""), "⚪")
 
-            with col_info:
-                st.markdown(f"**公司**：{record['company']}")
-                st.markdown(f"**岗位**：{record['position']}")
-                st.markdown(f"**城市/薪资**：{record.get('city','')} | {record.get('salary','')}")
-                st.markdown(f"**渠道**：{record.get('platform','')} | **方向**：{record.get('direction','')}")
-
-                if has_match:
-                    match = record["match_result"]
-                    score = match.get("overall_score", 0)
-                    color = "#66BB6A" if score >= 80 else "#FFA726"
-                    st.markdown(f"**匹配度**：<span style='color:{color}'>{score}/100</span>", unsafe_allow_html=True)
-
-            with col_action:
-                # 步骤1: 生成简历
-                if not has_resume:
-                    st.warning("⚠️ 尚未定制简历")
-                    if st.button("📝 去定制简历", key=f"goto_resume_{i}", use_container_width=True):
-                        st.session_state["nav"] = "📝 简历定制"
-                        st.rerun()
-                else:
-                    st.success("✅ 简历已就绪")
-                    # 查看/下载简历
-                    resume_text = record.get("customized_resume", "")
-                    st.download_button("⬇️ 下载简历 MD", data=resume_text,
-                        file_name=f"简历_{record['company']}_{record['position']}.md",
-                        mime="text/markdown", key=f"dl_{i}", use_container_width=True)
-
-                    # 复制按钮（Streamlit限制，用文本展示代替）
-                    with st.popover("📋 查看简历文本"):
-                        st.text_area("全选复制（Ctrl+A → Ctrl+C）", value=resume_text, height=300, key=f"copy_{i}")
-
-                st.divider()
-
-                # 步骤2: 投递链接
-                platform = record.get("platform", "")
-                if platform == "Boss直聘":
-                    st.markdown("🔗 [打开 Boss直聘](https://www.zhipin.com/)")
-                elif platform == "猎聘":
-                    st.markdown("🔗 [打开 猎聘](https://www.liepin.com/)")
-                elif platform == "脉脉":
-                    st.markdown("🔗 [打开 脉脉](https://maimai.cn/)")
-
-                st.caption("💡 复制简历内容 → 打开招聘平台 → 找到对应岗位 → 粘贴投递")
-
-                # 步骤3: 更新状态
-                st.divider()
-                st.markdown("**投递后更新状态**")
-                new_status = st.selectbox("状态", STATUS_FLOW,
-                    index=STATUS_FLOW.index(record.get("status", "已投递")) if record.get("status") in STATUS_FLOW else 1,
-                    key=f"status_{i}")
-                apply_notes = st.text_area("投递备注", placeholder="记录投递时间、对方反馈等...", key=f"notes_{i}", height=60)
-
-                if st.button("✅ 确认已投递/更新状态", key=f"confirm_{i}", type="primary", use_container_width=True):
-                    if new_status != record.get("status"):
-                        record.setdefault("history", []).append({
-                            "status": new_status, "time": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                        })
-                    record["status"] = new_status
-                    if apply_notes:
-                        old_notes = record.get("notes", "")
-                        record["notes"] = f"{old_notes}\n[{datetime.now().strftime('%m-%d %H:%M')}] {apply_notes}".strip()
-                    record["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-                    save_history(records)
-                    st.success("状态已更新")
+        with st.container():
+            col_r1, col_r2, col_r3 = st.columns([4, 2, 1])
+            with col_r1:
+                st.markdown(f"**{record['company']}** — {record['position']}")
+                st.caption(f"{record.get('city','')} | {record.get('salary','')} | {record.get('platform','')}")
+            with col_r2:
+                st.markdown(f"匹配度：<span style='color:{score_color};font-size:16pt'>{score}</span>/100", unsafe_allow_html=True)
+                st.caption(f"{status_badge} {record.get('status','')} | {'✅ 已定制' if has_resume else '⚠️ 待定制'}")
+            with col_r3:
+                if st.button("🚀 投递", key=f"quick_apply_{i}", type="primary", use_container_width=True):
+                    st.session_state["apply_target"] = record["id"]
                     st.rerun()
+            st.divider()
 
-    # 快速投递摘要
+    # ── 投递向导（当选中具体岗位时显示）──
+    if st.session_state.get("apply_target"):
+        target_id = st.session_state["apply_target"]
+        target = next((r for r in records if r["id"] == target_id), None)
+
+        if target:
+            st.divider()
+            st.markdown(f"## 📋 投递向导：{target['company']} — {target['position']}")
+
+            # 进度指示器
+            apply_step = st.session_state.get("apply_step", 1)
+            step_names = ["准备材料", "填写信息", "确认投递"]
+            cols = st.columns(3)
+            for j, name in enumerate(step_names):
+                with cols[j]:
+                    if j + 1 < apply_step:
+                        st.success(f"✅ {name}")
+                    elif j + 1 == apply_step:
+                        st.markdown(f"**🔵 {name}**")
+                    else:
+                        st.caption(f"⚪ {name}")
+
+            st.divider()
+
+            # Step 1: 准备材料
+            if apply_step == 1:
+                st.markdown("### 📝 Step 1：准备申请材料")
+
+                # 自动生成/获取简历
+                if not target.get("customized_resume"):
+                    st.warning("尚未定制简历，正在自动生成...")
+                    jd = target.get("jd_analysis") or (parse_jd_with_llm(target.get("jd_text", "")) if target.get("jd_text") else None)
+                    if jd and "error" not in jd:
+                        match_result = score_match(jd, exp_lib) if "error" not in jd else {}
+                        direction = jd.get("matched_direction", "AI产品运营")
+                        if direction not in DIRECTIONS:
+                            direction = "AI产品运营"
+                        resume = generate_customized_resume(direction, match_result, exp_lib, jd)
+                        target["customized_resume"] = resume
+                        target["match_result"] = match_result
+                        target["jd_analysis"] = jd
+                        save_history(records)
+                        st.success("✅ 简历已自动生成")
+                        st.rerun()
+
+                # 生成填表数据包
+                basic = exp_lib.get("basic", {})
+                form_data = {
+                    "姓名": basic.get("name", "牟思雨"),
+                    "手机": basic.get("phone", "18504284554"),
+                    "邮箱": basic.get("email", "msy1994dut@163.com"),
+                    "工作年限": "4年",
+                    "最高学历": "硕士",
+                    "毕业院校": "东北财经大学",
+                    "当前所在地": target.get("city", "上海"),
+                    "期望薪资": target.get("salary", "18k-26k"),
+                    "求职状态": "离职，随时到岗",
+                }
+
+                # 展示材料
+                tab_m1, tab_m2, tab_m3 = st.tabs(["📄 定制简历", "📋 填表数据", "✉️ 求职信"])
+                with tab_m1:
+                    resume_text = target.get("customized_resume", "")
+                    st.text_area("简历（全选复制）", value=resume_text, height=300, key="apply_resume")
+                with tab_m2:
+                    st.json(form_data)
+                    st.caption("💡 这些数据已按岗位预填，投递时直接复制粘贴")
+                with tab_m3:
+                    # 生成求职信
+                    jd = target.get("jd_analysis", {})
+                    if jd and "error" not in jd:
+                        letter = generate_cover_letter(jd, target.get("customized_resume", ""), exp_lib)
+                        st.text_area("求职信", value=letter, height=150, key="apply_letter")
+
+                col_s1, col_s2 = st.columns(2)
+                with col_s1:
+                    if st.button("取消", use_container_width=True):
+                        st.session_state["apply_target"] = None
+                        st.session_state["apply_step"] = 1
+                        st.rerun()
+                with col_s2:
+                    if st.button("下一步 → 填写信息", type="primary", use_container_width=True):
+                        st.session_state["apply_step"] = 2
+                        st.rerun()
+
+            # Step 2: 填写信息
+            elif apply_step == 2:
+                st.markdown("### ✍️ Step 2：在招聘平台填写信息")
+
+                platform = target.get("platform", "Boss直聘")
+                st.info(f"当前投递渠道：**{platform}**")
+
+                # 平台快捷入口
+                platform_urls = {
+                    "Boss直聘": "https://www.zhipin.com/",
+                    "猎聘": "https://www.liepin.com/",
+                    "脉脉": "https://maimai.cn/",
+                    "官网": "",
+                    "内推": "",
+                    "其他": "",
+                }
+                url = platform_urls.get(platform, "")
+                if url:
+                    st.markdown(f"🔗 [打开 {platform} 去投递]({url})")
+                else:
+                    st.caption(f"请在 {platform} 上找到对应岗位进行投递")
+
+                # 填表指引
+                st.markdown("#### 📋 需要填写/上传的内容")
+                col_f1, col_f2 = st.columns(2)
+                with col_f1:
+                    st.checkbox("个人信息（姓名/手机/邮箱）", value=True, disabled=True)
+                    st.checkbox("教育经历", value=True, disabled=True)
+                    st.checkbox("工作经历", value=bool(target.get("customized_resume")))
+                with col_f2:
+                    st.checkbox("上传附件简历", value=False)
+                    st.checkbox("发送求职信/招呼语", value=False)
+                    st.checkbox("填写期望薪资", value=False)
+
+                col_s1, col_s2 = st.columns(2)
+                with col_s1:
+                    if st.button("← 上一步", use_container_width=True):
+                        st.session_state["apply_step"] = 1
+                        st.rerun()
+                with col_s2:
+                    if st.button("下一步 → 确认投递", type="primary", use_container_width=True):
+                        st.session_state["apply_step"] = 3
+                        st.rerun()
+
+            # Step 3: 确认投递
+            elif apply_step == 3:
+                st.markdown("### ✅ Step 3：确认投递并更新状态")
+                st.success("请在招聘平台上完成投递后，点击下方按钮确认")
+
+                col_c1, col_c2 = st.columns(2)
+                with col_c1:
+                    new_status = st.selectbox("更新状态为", ["已投递", "初筛", "待反馈"],
+                        key="final_status")
+                    apply_note = st.text_area("备注（可选）", key="final_note", height=60,
+                        placeholder="如：已发送，HR说3个工作日内回复")
+                with col_c2:
+                    st.metric("岗位", f"{target['company']} - {target['position']}")
+                    st.metric("渠道", target.get("platform", ""))
+
+                col_s1, col_s2 = st.columns(2)
+                with col_s1:
+                    if st.button("← 上一步", use_container_width=True):
+                        st.session_state["apply_step"] = 2
+                        st.rerun()
+                with col_s2:
+                    if st.button("✅ 确认已投递", type="primary", use_container_width=True):
+                        # 自动更新状态
+                        old_status = target.get("status", "待投递")
+                        if new_status != old_status:
+                            target.setdefault("history", []).append({
+                                "status": new_status,
+                                "time": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                            })
+                        target["status"] = new_status
+                        if apply_note:
+                            target["notes"] = f"{target.get('notes','')}\n[投递确认 {datetime.now().strftime('%m-%d %H:%M')}] {apply_note}".strip()
+                        target["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+                        target["submitted_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+                        save_history(records)
+
+                        # 清理状态
+                        st.session_state["apply_target"] = None
+                        st.session_state["apply_step"] = 1
+                        st.success(f"🎉 投递成功！{target['company']} - {target['position']} 状态已更新为「{new_status}」")
+                        st.rerun()
+
+    # ── 底部：投递统计 ──
     st.divider()
-    st.markdown("### 📊 投递进度")
-    total = len(pending)
-    has_resume_count = len([r for r in pending if r.get("customized_resume")])
+    st.markdown("### 📊 投递总览")
+    total = len(records)
     submitted = len([r for r in records if r.get("status") not in ["待投递"]])
-    col_p1, col_p2, col_p3 = st.columns(3)
-    with col_p1:
-        st.metric("待处理", total)
-    with col_p2:
-        st.metric("已定制简历", has_resume_count, delta=f"{total-has_resume_count} 待定制" if total > has_resume_count else "全部就绪")
-    with col_p3:
-        st.metric("已投递", submitted)
+    interviewing = len([r for r in records if r.get("status") in ["一面", "二面", "终面"]])
+    offer_count = len([r for r in records if r.get("status") == "offer"])
+
+    col_p1, col_p2, col_p3, col_p4 = st.columns(4)
+    with col_p1: st.metric("总岗位", total)
+    with col_p2: st.metric("已投递", submitted)
+    with col_p3: st.metric("面试中", interviewing)
+    with col_p4: st.metric("offer", offer_count, delta="🎉" if offer_count > 0 else None)
 
 
 # ═══════════════════════════════════════
@@ -3669,6 +3801,10 @@ def main():
         st.session_state["show_new_profile"] = False
     if "predicted_questions" not in st.session_state:
         st.session_state["predicted_questions"] = None
+    if "apply_target" not in st.session_state:
+        st.session_state["apply_target"] = None
+    if "apply_step" not in st.session_state:
+        st.session_state["apply_step"] = 1
 
     records = load_history()
 
