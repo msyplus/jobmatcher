@@ -331,7 +331,25 @@ def migrate_legacy_data():
         with open(os.path.join(default_dir, "info.json"), "w", encoding="utf-8") as f:
             json.dump(info, f, ensure_ascii=False, indent=2)
 
-# 启动时迁移
+# 启动时自动恢复默认用户数据（Streamlit Cloud 部署后数据丢失的兜底）
+SEED_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "seed_experience_library.json")
+def seed_default_user():
+    default_dir = get_profile_path("default")
+    exp_file = os.path.join(default_dir, "experience_library.json")
+    hist_file = os.path.join(default_dir, "application_history.json")
+    info_file = os.path.join(default_dir, "info.json")
+    # 仅在数据完全不存在时恢复
+    if not os.path.exists(exp_file) and os.path.exists(SEED_FILE):
+        import shutil
+        shutil.copy(SEED_FILE, exp_file)
+    if not os.path.exists(hist_file):
+        with open(hist_file, "w", encoding="utf-8") as f:
+            json.dump([], f)
+    if not os.path.exists(info_file):
+        with open(info_file, "w", encoding="utf-8") as f:
+            json.dump({"name": "牟思雨", "email": "msy1994dut@163.com", "phone": "18504284554", "created_at": datetime.now().strftime("%Y-%m-%d %H:%M")}, f)
+
+seed_default_user()
 migrate_legacy_data()
 
 # 动态路径（基于活跃用户）
