@@ -206,8 +206,7 @@ hr { border-color: #e8ecf1 !important; }
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 PROFILES_DIR = os.path.join(DATA_DIR, "profiles")
 ACTIVE_PROFILE_FILE = os.path.join(DATA_DIR, "active_profile.json")
-SHARED_JD_CACHE = os.path.join(DATA_DIR, "jd_cache.json")
-SHARED_TEMPLATES = os.path.join(DATA_DIR, "templates.json")
+# 隐私：所有数据均按用户隔离，无共享存储
 
 # 确保目录存在
 for d in [DATA_DIR, PROFILES_DIR]:
@@ -1274,14 +1273,16 @@ SEARCH_CITIES = ["上海", "北京", "沈阳", "杭州", "深圳", "广州", "�
 
 
 def load_jd_cache():
-    if not os.path.exists(SHARED_JD_CACHE):
+        jd_cache_file = os.path.join(get_profile_path(get_active_profile()), "jd_cache.json")
+    if not os.path.exists(jd_cache_file):
         return []
-    with open(SHARED_JD_CACHE, "r", encoding="utf-8") as f:
+    with open(jd_cache_file, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def save_jd_cache(entries):
-    with open(SHARED_JD_CACHE, "w", encoding="utf-8") as f:
+    jd_cache_file = os.path.join(get_profile_path(get_active_profile()), "jd_cache.json")
+    with open(jd_cache_file, "w", encoding="utf-8") as f:
         json.dump(entries, f, ensure_ascii=False, indent=2)
 
 
@@ -3250,7 +3251,7 @@ def render_company_research():
 FEEDBACK_FILE = "user_feedback.json"
 
 def save_feedback_entry(entry):
-    fpath = os.path.join(DATA_DIR, FEEDBACK_FILE)  # 共享文件
+    fpath = os.path.join(get_profile_path(get_active_profile()), FEEDBACK_FILE)  # 用户隔离
     existing = []
     if os.path.exists(fpath):
         with open(fpath, "r", encoding="utf-8") as f:
@@ -3287,7 +3288,7 @@ def render_feedback():
 
     with col_f2:
         st.markdown("### 📋 反馈记录")
-        fpath = os.path.join(DATA_DIR, FEEDBACK_FILE)
+        fpath = os.path.join(get_profile_path(get_active_profile()), FEEDBACK_FILE)
         if os.path.exists(fpath):
             with open(fpath, "r", encoding="utf-8") as f:
                 feedbacks = json.load(f)
@@ -3332,13 +3333,25 @@ def login_screen():
         else:
             with st.form("login_form"):
                 st.markdown("### 🔐 登录")
-                profile_names = {p["id"]: p["name"] for p in profiles}
-                selected = st.selectbox("选择用户", list(profile_names.keys()),
-                    format_func=lambda x: f"{profile_names[x]} ({x})")
-                pw = st.text_input("密码", type="password")
+                login_email = st.text_input("邮箱", placeholder="输入注册邮箱")
+                login_pw = st.text_input("密码", type="password")
                 if st.form_submit_button("登录", type="primary", use_container_width=True):
-                    if verify_login(selected, pw):
-                        set_active_profile(selected)
+                    # 按邮箱查找用户
+                    found = None
+                    for p in profiles:
+                        if p.get("email") == login_email:
+                            found = p
+                            break
+                    if not found:
+                        # 兼容旧用户：按ID登录
+                        for p in profiles:
+                            if p["id"] == login_email:
+                                found = p
+                                break
+                    if not found:
+                        st.error("用户不存在")
+                    elif verify_login(found["id"], login_pw):
+                        set_active_profile(found["id"])
                         st.session_state["logged_in"] = True
                         st.rerun()
                     else:
@@ -3423,22 +3436,14 @@ def main():
         ], key="nav")
 
         st.divider()
-        st.subheader("👤 用户档案")
+        st.subheader("👤 当前用户")
         active = get_active_profile()
-        profiles = list_profiles()
-        profile_names = {p["id"]: p["name"] for p in profiles}
-
-        if profiles:
-            selected_name = st.selectbox(
-                "当前用户",
-                options=list(profile_names.keys()),
-                format_func=lambda x: profile_names.get(x, x),
-                index=list(profile_names.keys()).index(active) if active in profile_names else 0,
-                key="profile_switcher",
-            )
-            if selected_name != active:
-                set_active_profile(selected_name)
-                st.rerun()
+        active_dir = get_profile_path(active)
+        if os.path.exists(os.path.join(active_dir, "info.json")):
+            with open(os.path.join(active_dir, "info.json"), "r", encoding="utf-8") as f:
+                active_info = json.load(f)
+            st.caption(f"姓名：{active_info.get('name','')}")
+            st.caption(f"邮箱：{active_info.get('email','')}")
 
         if st.button("➕ 新建档案", use_container_width=True):
             st.session_state["show_new_profile"] = True
@@ -3467,6 +3472,8 @@ def main():
                 active_info = json.load(f)
 
         if st.button("🚪 退出登录", use_container_width=True):
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
             st.session_state["logged_in"] = False
             st.rerun()
 
