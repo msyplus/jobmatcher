@@ -1,0 +1,224 @@
+{
+  "basic": {
+    "name": "牟思雨",
+    "phone": "18504284554",
+    "email": "msy1994dut@163.com",
+    "years": 4,
+    "cities": ["上海", "北京", "沈阳", "杭州"],
+    "salary_min": 18000,
+    "salary_max": 26000
+  },
+  "education": [
+    {
+      "time": "2020.09–2022.06",
+      "school": "东北财经大学",
+      "degree": "硕士",
+      "major": "工程管理",
+      "direction": "数据挖掘与商务智能",
+      "highlights": ["省优秀毕业生", "一等学业奖学金"]
+    },
+    {
+      "time": "2013.09–2017.06",
+      "school": "大连理工大学",
+      "degree": "本科",
+      "major": "金属材料与工程",
+      "highlights": ["985院校"]
+    },
+    {
+      "time": "2018.05–2020.08",
+      "label": "研究生备考与职业能力建设",
+      "details": ["全职备考硕士", "同期完成PMP与IPMP-D认证", "系统学习Python数据分析与数据挖掘"]
+    }
+  ],
+  "certifications": [
+    "PMP（项目管理专业人士认证）",
+    "IPMP-D（国际项目管理资质认证·D级）",
+    "携程6-Sigma绿带认证",
+    "AI项目管理专项培训"
+  ],
+  "skills": [
+    {"name": "大模型应用运营", "category": "AI", "level": "expert"},
+    {"name": "Agent搭建与调优", "category": "AI", "level": "advanced"},
+    {"name": "Prompt工程", "category": "AI", "level": "expert"},
+    {"name": "数据标注管理", "category": "AI", "level": "expert"},
+    {"name": "模型效果评测", "category": "AI", "level": "advanced"},
+    {"name": "badcase归因分析", "category": "AI", "level": "expert"},
+    {"name": "RAG知识库搭建", "category": "AI", "level": "intermediate"},
+    {"name": "服务体验治理", "category": "domain", "level": "expert"},
+    {"name": "纠纷与规则运营", "category": "domain", "level": "expert"},
+    {"name": "平台治理", "category": "domain", "level": "advanced"},
+    {"name": "VOC数据分析", "category": "domain", "level": "expert"},
+    {"name": "体验指标体系搭建", "category": "domain", "level": "expert"},
+    {"name": "SOP体系搭建", "category": "domain", "level": "expert"},
+    {"name": "批量纠纷治理", "category": "domain", "level": "expert"},
+    {"name": "全链路体验优化", "category": "domain", "level": "advanced"},
+    {"name": "项目管理/PMP", "category": "methodology", "level": "expert"},
+    {"name": "6σ/DMAIC方法论", "category": "methodology", "level": "advanced"},
+    {"name": "WBS与进度管控", "category": "methodology", "level": "advanced"},
+    {"name": "干系人管理", "category": "methodology", "level": "advanced"},
+    {"name": "跨部门协同", "category": "methodology", "level": "expert"},
+    {"name": "Python/Streamlit", "category": "tech", "level": "intermediate"},
+    {"name": "Vibe Coding", "category": "tech", "level": "advanced"},
+    {"name": "SQL数据分析", "category": "tech", "level": "intermediate"},
+    {"name": "数据可视化(ArtNova/Plotly)", "category": "tech", "level": "advanced"},
+    {"name": "Jira/Confluence/飞书", "category": "tech", "level": "intermediate"},
+    {"name": "A/B实验设计", "category": "tech", "level": "intermediate"}
+  ],
+  "experiences": [
+    {
+      "id": "ctrip-ai-assistant",
+      "company": "携程旅游网络技术（上海）有限公司",
+      "role": "项目管理专员（机票服务部）",
+      "time": "2022.08–2025.07",
+      "category": ["AI产品落地", "项目管理"],
+      "summary": "主导大模型智能客服工具0-1落地",
+      "bullets": [
+        {"text": "从客服SOP中识别工单自动录入、沟通记录总结、历史操作日志总结三个Agent场景，完成3000条样本标注", "keywords": ["Agent", "数据标注", "场景识别"]},
+        {"text": "多模型评审选型，建立离线测试→A/B实验→全量测试三级评测流程。通过badcase分级（P0金额/P1责任方/P2格式）、Prompt约束注入、前端校验机制，准确率从70%提升至94%（+24pt）", "keywords": ["Prompt工程", "模型评测", "badcase归因", "A/B实验"]},
+        {"text": "工单创建时长减少40%，5%工单完全自动创建，年节省人力24人次（占项目集总收益70%）", "keywords": ["AI提效", "自动化"]},
+        {"text": "二期推广至全事件类型（退票/改签/航变），三期覆盖非对客场景，四期规划Agent方案推荐", "keywords": ["项目推广", "Agent方案"]}
+      ]
+    },
+    {
+      "id": "ctrip-warning-platform",
+      "company": "携程旅游网络技术（上海）有限公司",
+      "role": "项目管理专员（机票服务部）",
+      "time": "2022.08–2025.07",
+      "category": ["风险预警", "0-1搭建", "知识库"],
+      "summary": "0-1搭建投诉智慧预警平台",
+      "bullets": [
+        {"text": "制定7类敏感词预警与4类员工操作类预警规则，建设S/A/B/C四级敏感词词库，本质是领域知识库的冷启动→分级→验证→迭代闭环", "keywords": ["知识库", "预警规则", "词库建设"]},
+        {"text": "建立热点事件监控与规则动态调整机制，基于运营数据回滚持续优化命中率", "keywords": ["数据驱动", "动态调整"]},
+        {"text": "预警人工干预比降低5pt（20%→15%），预警命中舆情比降低20%（35%→26%），经服舆情投诉比从万分之20降至万分之16", "keywords": ["舆情治理", "风险前置"]}
+      ]
+    },
+    {
+      "id": "ctrip-data-system",
+      "company": "携程旅游网络技术（上海）有限公司",
+      "role": "项目管理专员（机票服务部）",
+      "time": "2022.08–2025.07",
+      "category": ["数据体系", "指标体系"],
+      "summary": "搭建14个核心指标的体验监测体系",
+      "bullets": [
+        {"text": "围绕前处理→过程→结果→反馈全链路，搭建14个核心指标体验监控体系（投诉订单比、舆情投诉比、进线率、被催率、预警命中率、达成一致率、好评率等），统一全板块指标定义与筛选逻辑", "keywords": ["指标体系", "数据监控"]},
+        {"text": "完成6个核心看板+4个项目看板落地（ArtNova），推动数据从Excel转为可视化实时看板", "keywords": ["数据可视化", "看板搭建"]},
+        {"text": "建立日报-周报-月报-异常反馈机制，形成监控→归因→改进的闭环", "keywords": ["数据运营", "闭环机制"]}
+      ]
+    },
+    {
+      "id": "ctrip-process-optimization",
+      "company": "携程旅游网络技术（上海）有限公司",
+      "role": "项目管理专员（机票服务部）",
+      "time": "2022.08–2025.07",
+      "category": ["流程优化", "体验治理"],
+      "summary": "服务流程优化与根因治理",
+      "bullets": [
+        {"text": "梳理服务SOP标准流程，制定投诉场景分层规则，分析多次进线根因及板块间纠纷扭转根因", "keywords": ["SOP", "流程优化", "根因分析"]},
+        {"text": "投诉被催率降低20%，一线转移率降低40%，板块间扭转比例下降13pt", "keywords": ["体验指标", "降本提效"]},
+        {"text": "主导自动推评功能上线，邀评率提升53pt，服务分析样本量增加20%", "keywords": ["自动化", "用户反馈"]}
+      ]
+    },
+    {
+      "id": "ctrip-ai-quality",
+      "company": "携程旅游网络技术（上海）有限公司",
+      "role": "项目管理专员（机票服务部）",
+      "time": "2022.08–2025.07",
+      "category": ["AI质检", "模型评测"],
+      "summary": "AI质检模型运营与评估体系设计",
+      "bullets": [
+        {"text": "定义识别需求/有效共情/达成一致/承诺回复四维度AI质检评测体系", "keywords": ["评测体系", "AI质检"]},
+        {"text": "建立badcase发现→归因分类→模型调优闭环，推动质检从抽检向全量覆盖", "keywords": ["badcase", "模型调优"]}
+      ]
+    },
+    {
+      "id": "ctrip-sixsigma-1",
+      "company": "携程旅游网络技术（上海）有限公司",
+      "role": "项目管理专员（机票服务部）",
+      "time": "2022.08–2025.07",
+      "category": ["6σ", "降本增效"],
+      "summary": "降低机票单张赔款（公司级6σ项目集）",
+      "bullets": [
+        {"text": "作为数据与进度管理负责人，运用DMAIC全流程——定义赔款分类与各产线目标→数据测量与清洗→关键因子分析→制定跨部门进度表→监控各Owner数据", "keywords": ["DMAIC", "项目管理", "跨部门"]},
+        {"text": "项目分析&改进阶段单月单张赔款降低10%", "keywords": ["降本增效"]}
+      ]
+    },
+    {
+      "id": "ctrip-sixsigma-2",
+      "company": "携程旅游网络技术（上海）有限公司",
+      "role": "项目管理专员（机票服务部）",
+      "time": "2022.08–2025.07",
+      "category": ["6σ", "舆情治理"],
+      "summary": "降低经服舆情投诉比（6σ项目）",
+      "bullets": [
+        {"text": "挖掘舆情投诉根因，制定产品/系统/流程/员工操作多维度改进措施", "keywords": ["根因分析", "多维改进"]},
+        {"text": "项目周期内核心指标累计降低16%", "keywords": ["舆情治理"]}
+      ]
+    },
+    {
+      "id": "pdd-governance",
+      "company": "拼多多网络科技有限公司",
+      "role": "服务运营专家（平台服务部）",
+      "time": "2025.11–2026.02",
+      "category": ["纠纷治理", "自动化", "电商"],
+      "summary": "负责百亿补贴业务线纠纷治理与自动化运营",
+      "bullets": [
+        {"text": "建立场景识别→特征提取→规则制定→系统落地→SOP沉淀五步方法论，覆盖延迟发货、物流异常、商家违规等高频纠纷场景，形成《批量事件紧急响应SOP》", "keywords": ["方法论", "SOP", "批量治理"]},
+        {"text": "苹果17延迟发货、台湾集运批量退款等场景，通过规则+系统自动拦截，日均减少1580单人工处理", "keywords": ["自动化", "降本提效"]},
+        {"text": "银饰品违规发货场景，48小时完成定位→影响面分析→跨部门协调（招商/治理/客服）→方案输出，日均客诉从120单降至5单（降幅96%），消除外投与舆情风险", "keywords": ["应急响应", "跨部门", "风险消除"]},
+        {"text": "负责日常数据播报，针对异常做归因分析，识别批量问题事件风险并制定服务策略", "keywords": ["数据运营", "风险识别"]}
+      ]
+    },
+    {
+      "id": "tog-delivery",
+      "company": "北京数码视讯科技股份有限公司",
+      "role": "项目管理专员（硬件产品部）",
+      "time": "2017.07–2018.04",
+      "category": ["ToG项目", "硬件交付"],
+      "summary": "面向ToG数字电视硬件设备项目交付",
+      "bullets": [
+        {"text": "独立完成34个县域级数字电视子平台的搭建、验收与方案优化（地面数字无线覆盖项目）", "keywords": ["项目交付", "大规模部署"]},
+        {"text": "积累面向政府项目的大规模现场交付、多方协同与风险管控经验", "keywords": ["多方协同", "风险管理"]}
+      ]
+    }
+  ],
+  "personal_projects": [
+    {
+      "name": "客诉智能分类与处理建议系统",
+      "url": "https://complaint-classifier.streamlit.app",
+      "description": "规则引擎+LLM，5分类+3级优先级+批量异常检测，50条模拟数据含2组埋点异常",
+      "tech": ["Python", "Streamlit", "LLM", "Plotly"]
+    },
+    {
+      "name": "VOC批量异常风险识别与预警工具",
+      "url": "https://voc-risk-detector.streamlit.app",
+      "description": "TF-IDF文本聚类+时间序列异常检测，自动输出红/橙/黄三级预警，200条模拟数据",
+      "tech": ["Python", "Streamlit", "scikit-learn", "jieba", "Plotly"]
+    },
+    {
+      "name": "AI客服对话质量评估器",
+      "url": "https://cs-quality-evaluator.streamlit.app",
+      "description": "LLM+规则引擎，四维度自动评分（识别需求/有效共情/达成一致/承诺回复），雷达图可视化",
+      "tech": ["Python", "Streamlit", "LLM", "Plotly"]
+    }
+  ],
+  "resume_directions": {
+    "AI产品运营": {
+      "target_roles": ["AI产品运营", "大模型应用运营", "智能化运营"],
+      "emphasize_skills": ["大模型应用运营", "Agent搭建与调优", "Prompt工程", "模型效果评测", "badcase归因", "数据标注管理"],
+      "primary_experiences": ["ctrip-ai-assistant", "ctrip-ai-quality", "ctrip-warning-platform", "ctrip-data-system", "pdd-governance"],
+      "summary_template": "4年AI产品落地与大模型应用运营经验，专注智能客服与Agent方向。核心闭环：场景识别→数据标注与Prompt工程→Agent工作流与RAG知识库搭建→效果评测体系→模型迭代优化。"
+    },
+    "服务体验运营": {
+      "target_roles": ["服务体验运营", "平台治理运营", "体验治理"],
+      "emphasize_skills": ["服务体验治理", "纠纷与规则运营", "VOC数据分析", "体验指标体系", "SOP体系搭建", "批量纠纷治理"],
+      "primary_experiences": ["pdd-governance", "ctrip-data-system", "ctrip-warning-platform", "ctrip-process-optimization", "ctrip-ai-assistant"],
+      "summary_template": "4年服务体验治理与平台规则运营经验，横跨OTA与电商。核心闭环：体验监测体系搭建→VOC/客诉数据分析→纠纷根因定位→规则/流程方案设计→跨部门推动落地→效果验证与SOP沉淀。"
+    },
+    "AI项目管理": {
+      "target_roles": ["AI项目管理", "技术项目管理"],
+      "emphasize_skills": ["项目管理/PMP", "6σ/DMAIC方法论", "WBS与进度管控", "干系人管理", "跨部门协同"],
+      "primary_experiences": ["ctrip-ai-assistant", "ctrip-warning-platform", "ctrip-sixsigma-1", "ctrip-sixsigma-2", "pdd-governance", "tog-delivery"],
+      "summary_template": "4年AI项目管理经验，项目全流程交付。持PMP、IPMP-D、6σ绿带认证，独立管理C1/C2级战略项目集。"
+    }
+  }
+}

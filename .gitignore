@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+data/profiles/
+data/active_profile.json
+data/jd_cache.json
+*.csv
