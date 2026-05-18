@@ -1,5 +1,5 @@
 """
-JobMatcher — AI 智能投递管理工具 · 离线版
+JobMatcher — AI 智能投递管理工具
 """
 
 import streamlit as st
@@ -335,7 +335,7 @@ def migrate_legacy_data():
 # 种子数据：仅对指定用户加载真实经历库，其他用户生成模拟数据
 SEED_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "seed_experience_library.json")
 DEVICE_SECRET = "msy2026"
-OFFLINE_MODE = True  # 离线版标记
+OFFLINE_MODE = False  # 在线版
 
 MOCK_EXPERIENCE_LIB = {
     "basic": {"name": "张明", "phone": "138****1234", "email": "demo@example.com"},
