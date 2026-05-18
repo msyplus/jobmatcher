@@ -2567,22 +2567,17 @@ def estimate_quick_match(job, exp_lib):
     return min(score, 98)
 
 
-JOB_DISCOVERY_PROMPT = """你是招聘市场分析师。根据候选人的经历库，推荐5个当前市场上最匹配的真实在招岗位。
+JOB_DISCOVERY_PROMPT = """你是招聘市场分析师。根据候选人的经历库，推荐5个当前市场上最匹配的真实在招岗位。必须输出JSON数组，每个元素包含company/position/city/salary/direction/match_reason/hard_skills。
 
-## 候选人档案
-- 方向：{directions}
+候选人档案：
+- 求职方向：{directions}
 - 核心技能：{skills}
-- 工作经验：{experience_summary}
+- 经历摘要：{experience_summary}
 - 目标城市：{cities}
-- 薪资期望：{salary_range}
+- 薪资：{salary_range}
 
-## 输出要求
-1. 推荐真实存在的公司和岗位（基于2026年5月市场情况）
-2. 每个岗位说明为什么匹配
-3. 给出薪资范围估算
-
-输出JSON数组：
-[{{"company":"公司","position":"岗位","city":"城市","salary":"薪资范围","direction":"方向","match_reason":"匹配原因(30字)","hard_skills":["要求技能"]}}]"""
+输出格式（严格JSON数组，不要解释）：
+[{{"company":"公司名","position":"岗位名","city":"城市","salary":"薪资","direction":"方向","match_reason":"为什么匹配(20字)","hard_skills":["技能1","技能2"]}}]"""
 
 
 def discover_jobs(exp_lib):
