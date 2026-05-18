@@ -3893,11 +3893,12 @@ def main():
     if "is_admin" not in st.session_state:
         st.session_state["is_admin"] = False
 
+    # 免登录模式（临时）：自动以 default 用户登录
     if not st.session_state["logged_in"]:
-        login_screen()
-        return
+        set_active_profile("default")
+        st.session_state["logged_in"] = True
 
-    # 管理员模式
+    # 管理员模式（仍可通过侧边栏手动切换）
     if st.session_state.get("is_admin"):
         render_admin_panel()
         # 侧边栏最小化
@@ -3961,48 +3962,7 @@ def main():
         ], key="nav")
 
         st.divider()
-        st.subheader("👤 当前用户")
-        active = get_active_profile()
-        active_dir = get_profile_path(active)
-        if os.path.exists(os.path.join(active_dir, "info.json")):
-            with open(os.path.join(active_dir, "info.json"), "r", encoding="utf-8") as f:
-                active_info = json.load(f)
-            st.caption(f"姓名：{active_info.get('name','')}")
-            st.caption(f"邮箱：{active_info.get('email','')}")
-
-        if st.button("➕ 新建档案", use_container_width=True):
-            st.session_state["show_new_profile"] = True
-
-        if st.session_state.get("show_new_profile"):
-            with st.form("new_profile"):
-                new_name = st.text_input("姓名")
-                new_email = st.text_input("邮箱")
-                new_phone = st.text_input("手机")
-                new_pw = st.text_input("登录密码", type="password")
-                if st.form_submit_button("创建"):
-                    if new_name and new_pw:
-                        pid = create_profile(new_name, new_email, new_phone, new_pw)
-                        set_active_profile(pid)
-                        st.session_state["show_new_profile"] = False
-                        st.success(f"已创建：{new_name}")
-                        st.rerun()
-                    else:
-                        st.error("姓名和密码为必填")
-
-        st.divider()
-        active_info = {}
-        active_dir = get_profile_path(active)
-        if os.path.exists(os.path.join(active_dir, "info.json")):
-            with open(os.path.join(active_dir, "info.json"), "r", encoding="utf-8") as f:
-                active_info = json.load(f)
-
-        if st.button("🚪 退出登录", use_container_width=True):
-            for key in list(st.session_state.keys()):
-                del st.session_state[key]
-            st.session_state["logged_in"] = False
-            st.rerun()
-
-        st.caption(f"📁 用户ID：{active}")
+        st.caption("🔓 免登录模式")
         st.caption(f"📝 投递记录：{len(records)}")
         if st.button("🔄 刷新", use_container_width=True):
             st.rerun()
